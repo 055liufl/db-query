@@ -1,0 +1,70 @@
+- generic [ref=e1]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - link "← 返回列表" [ref=e7] [cursor=pointer]:
+        - /url: /
+      - heading "查询：db-query" [level=4] [ref=e9]
+    - generic [ref=e10]:
+      - generic [ref=e11]:
+        - strong [ref=e13]: 元数据
+        - generic [ref=e14]:
+          - generic [ref=e37]:
+            - generic [ref=e40]:
+              - searchbox "搜索表/视图名" [ref=e42]
+              - button "search" [ref=e45] [cursor=pointer]:
+                - img "search" [ref=e47]:
+                  - img [ref=e48]
+            - button "刷新元数据" [ref=e51] [cursor=pointer]:
+              - generic [ref=e52]: 刷新元数据
+          - generic [ref=e53]: 缓存时间：2026/4/2 02:15:42
+          - button "collapsed public.usersBASE TABLE" [ref=e57] [cursor=pointer]:
+            - img "collapsed" [ref=e59]:
+              - img [ref=e60]
+            - generic [ref=e63]:
+              - strong [ref=e65]: public.users
+              - text: BASE TABLE
+      - generic [ref=e23]:
+        - generic [ref=e25]:
+          - strong [ref=e27]: SQL
+          - code [ref=e67]:
+            - generic [ref=e68]:
+              - textbox "Editor content" [ref=e69]
+              - textbox [ref=e70]
+              - generic [ref=e75]: "1"
+              - generic [ref=e81]: SELECT 1 AS one
+          - button "执 行" [active] [ref=e30] [cursor=pointer]:
+            - generic [ref=e31]: 执 行
+        - generic [ref=e33]:
+          - strong [ref=e35]: 结果
+          - generic [ref=e84]:
+            - generic [ref=e87]:
+              - table [ref=e91]:
+                - rowgroup [ref=e92]:
+                  - row "one (int4)" [ref=e93]:
+                    - columnheader "one (int4)" [ref=e94]
+                - rowgroup [ref=e95]:
+                  - row "1" [ref=e96]:
+                    - cell "1" [ref=e97]
+              - list [ref=e98]:
+                - listitem "上一页" [ref=e99]:
+                  - button "left" [disabled] [ref=e100]:
+                    - img "left" [ref=e101]:
+                      - img [ref=e102]
+                - listitem "1" [ref=e104] [cursor=pointer]:
+                  - generic [ref=e105]: "1"
+                - listitem "下一页" [ref=e106]:
+                  - button "right" [disabled] [ref=e107]:
+                    - img "right" [ref=e108]:
+                      - img [ref=e109]
+                - listitem [ref=e111]:
+                  - generic "页码" [ref=e112] [cursor=pointer]:
+                    - generic [ref=e114]:
+                      - combobox "页码" [ref=e116]
+                      - generic "50 条/页" [ref=e117]
+                    - generic:
+                      - img:
+                        - img
+            - generic [ref=e118]: 1 行 · 55 ms
+  - generic [ref=e36]:
+    - alert
+    - alert

@@ -1,0 +1,40 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e86]:
+    - generic [ref=e87]:
+      - link "← 返回列表" [ref=e89] [cursor=pointer]:
+        - /url: /
+      - heading "查询：db-query" [level=4] [ref=e91]
+    - generic [ref=e92]:
+      - generic [ref=e93]:
+        - strong [ref=e95]: 元数据
+        - generic [ref=e96]:
+          - generic [ref=e97]:
+            - generic [ref=e100]:
+              - searchbox "搜索表/视图名" [ref=e102]
+              - button "search" [ref=e105] [cursor=pointer]:
+                - img "search" [ref=e107]:
+                  - img [ref=e108]
+            - button "刷新元数据" [ref=e111] [cursor=pointer]:
+              - generic [ref=e112]: 刷新元数据
+          - generic [ref=e113]: 缓存时间：2026/4/2 02:15:42
+          - button "collapsed public.usersBASE TABLE" [ref=e117] [cursor=pointer]:
+            - img "collapsed" [ref=e119]:
+              - img [ref=e120]
+            - generic [ref=e123]:
+              - strong [ref=e125]: public.users
+              - text: BASE TABLE
+      - generic [ref=e127]:
+        - generic [ref=e129]:
+          - strong [ref=e131]: SQL
+          - code [ref=e134]:
+            - generic [ref=e135]:
+              - textbox "Editor content" [ref=e136]
+              - textbox [ref=e137]
+              - generic [ref=e142]: "1"
+              - generic [ref=e148]: SELECT 1 AS one
+          - button "执 行" [ref=e150] [cursor=pointer]:
+            - generic [ref=e151]: 执 行
+        - strong [ref=e155]: 结果
+  - generic [ref=e156]:
+    - alert
+    - alert

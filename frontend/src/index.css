@@ -1,0 +1,158 @@
+@import "../../site/tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--color-text);
+  background: var(--color-bg-page);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+}
+
+/* 主按钮：黄底黑字 + 硬阴影按压（style.md §4） */
+.ant-btn-primary:not(:disabled) {
+  background: var(--color-primary) !important;
+  color: var(--color-black) !important;
+  border: 2px solid var(--color-black) !important;
+  box-shadow: var(--shadow-offset) var(--shadow-color) !important;
+  transition:
+    transform var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard);
+}
+
+.ant-btn-primary:not(:disabled):hover {
+  background: var(--color-primary-hover) !important;
+  color: var(--color-black) !important;
+  border-color: var(--color-black) !important;
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 var(--shadow-color) !important;
+}
+
+.ant-btn-primary:not(:disabled):active {
+  transform: translate(3px, 3px);
+  box-shadow: 1px 1px 0 var(--shadow-color) !important;
+}
+
+.ant-btn-primary.ant-btn-loading {
+  transform: none;
+}
+
+/* 工具栏内次按钮 */
+.md-toolbar .ant-btn-default:not(:disabled) {
+  border: 2px solid var(--color-black) !important;
+  color: var(--color-black) !important;
+  background: transparent !important;
+  font-weight: 600;
+}
+
+.md-toolbar .ant-btn-default:not(:disabled):hover {
+  border-color: var(--color-black) !important;
+  color: var(--color-black) !important;
+  background: rgba(255, 241, 0, 0.25) !important;
+}
+
+.ant-btn-link {
+  color: var(--color-blue) !important;
+  font-weight: 500;
+}
+
+.ant-btn-link:hover {
+  color: var(--color-blue-hover) !important;
+}
+
+.ant-input-outlined:focus,
+.ant-input-outlined:focus-within,
+.ant-input-affix-wrapper:focus,
+.ant-input-affix-wrapper-focused {
+  border-color: var(--color-purple) !important;
+  box-shadow: var(--focus-ring) !important;
+}
+
+/* 卡片：轻阴影；hover 微抬（style.md §7，数据页略收敛） */
+.md-card.ant-card {
+  border: 2px solid var(--color-black);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+  transition:
+    transform var(--duration-md) var(--ease-standard),
+    box-shadow var(--duration-md) var(--ease-standard);
+}
+
+.md-card.ant-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.md-card.ant-card .ant-card-head {
+  border-bottom: 2px solid var(--color-border);
+  font-weight: 700;
+  color: var(--color-black);
+}
+
+.md-topbar {
+  min-height: var(--layout-topbar);
+  border-bottom: 2px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.md-link {
+  color: var(--color-blue);
+  font-weight: 500;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    background var(--duration-fast) var(--ease-standard);
+}
+
+.md-link:hover {
+  border-bottom-color: var(--color-blue);
+}
+
+.md-editor-frame {
+  border-radius: var(--radius-md);
+  border: 2px solid var(--color-black);
+  overflow: hidden;
+  background: var(--color-code);
+}
+
+.md-result-toolbar {
+  border-bottom: 2px solid var(--color-border);
+}
+
+@keyframes md-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.md-enter {
+  animation: md-fade-up var(--duration-md) var(--ease-standard) both;
+}
+
+/* 键盘 focus 可见性 */
+.md-link:focus-visible,
+.ant-btn:focus-visible {
+  outline: 2px solid var(--color-purple);
+  outline-offset: 2px;
+}

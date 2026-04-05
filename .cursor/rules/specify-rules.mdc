@@ -1,0 +1,87 @@
+---
+description: Project Development Guidelines
+globs: ["**/*"]
+alwaysApply: true
+---
+# db-query Development Guidelines
+
+Auto-generated from feature plan 001-db-query-tool. Last updated: 2026-03-29
+
+## Active Technologies
+
+**Backend**: Python 3.12+ (uv), FastAPI, sqlglot, openai SDK, asyncpg, SQLite (stdlib sqlite3)
+**Frontend**: TypeScript 5.x, React 18, Refine 5, Tailwind CSS, Ant Design 5, Monaco Editor
+**Storage**: SQLite (~/.db_query/db_query.db), PostgreSQL (target, read-only)
+**Platform**: Win10 + Docker Toolbox, docker-compose
+
+## Project Structure
+
+All source code lives under the workspace root `db-query/`:
+
+```text
+db-query/
+├── backend/
+│   ├── pyproject.toml
+│   ├── Dockerfile
+│   └── app/
+│       ├── main.py
+│       ├── models/         # Pydantic v2 models (AppBaseModel base)
+│       ├── services/       # Business logic
+│       ├── routers/        # FastAPI routers
+│       └── storage/        # SQLite access (stdlib sqlite3)
+├── frontend/
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── Dockerfile
+│   └── src/
+│       ├── types/          # TypeScript interfaces for all API responses
+│       ├── services/api.ts # Centralized API calls
+│       ├── pages/
+│       └── components/
+├── docker-compose.yml
+└── specs/                  # Feature specifications (non-source)
+```
+
+## Commands
+
+```bash
+# Start all services
+docker-compose up --build
+
+# Backend only (dev)
+cd backend && uv run uvicorn app.main:app --reload
+
+# Frontend only (dev)
+cd frontend && npm run dev
+```
+
+## Code Style
+
+**Backend**:
+- Ergonomic Python: readable, idiomatic, avoid over-engineering
+- All functions/methods MUST have full type annotations (PEP 604)
+- All data models MUST use Pydantic v2 (inherit from AppBaseModel)
+- All API responses MUST use camelCase (alias_generator=to_camel)
+- CORS: allow_origins=["*"]
+- No authentication middleware
+
+**Frontend**:
+- TypeScript only (.tsx/.ts), no .js files
+- No `any` type without explicit comment justification
+- All API response types MUST be defined in src/types/
+- Use Refine 5 data hooks for data fetching
+
+**SQL Safety**:
+- All SQL MUST be validated with sqlglot (dialect="postgres")
+- Only SELECT statements allowed
+- Auto-append LIMIT 1000 if no LIMIT clause
+
+## Recent Changes
+
+- 2026-03-29: Initial plan created for 001-db-query-tool
+  - Backend: FastAPI + asyncpg + sqlglot + openai SDK
+  - Frontend: React + Refine 5 + Monaco Editor
+  - Storage: SQLite for connections and metadata cache
+
+<!-- MANUAL ADDITIONS START -->
+<!-- MANUAL ADDITIONS END -->

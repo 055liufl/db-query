@@ -1,0 +1,26 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - link "← 返回列表" [ref=e7] [cursor=pointer]:
+      - /url: /
+    - heading "查询：test-conn" [level=4] [ref=e9]
+  - generic [ref=e10]:
+    - generic [ref=e11]:
+      - strong [ref=e13]: 元数据
+      - generic [ref=e14]:
+        - generic [ref=e36]:
+          - generic [ref=e39]:
+            - searchbox "搜索表/视图名" [ref=e41]
+            - button "search" [ref=e44] [cursor=pointer]:
+              - img "search" [ref=e46]:
+                - img [ref=e47]
+          - button "刷新元数据" [ref=e50] [cursor=pointer]:
+            - generic [ref=e51]: 刷新元数据
+        - generic [ref=e52]: 未找到名为 'test-conn' 的数据库连接
+        - generic [ref=e53]: 暂无表或视图
+    - generic [ref=e23]:
+      - generic [ref=e25]:
+        - strong [ref=e27]: SQL
+        - generic [ref=e29]: Loading...
+        - button "执 行" [ref=e30] [cursor=pointer]:
+          - generic [ref=e31]: 执 行
+      - strong [ref=e35]: 结果

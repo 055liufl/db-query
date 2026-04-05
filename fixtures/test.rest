@@ -1,0 +1,105 @@
+# @file 依据 specs/001-db-query-tool/contracts/api.md 生成
+# @see  基础 URL: http://<host>:8000/api/v1 | camelCase JSON | 错误: { error, message, detail? }
+# 使用 VS Code / Cursor 扩展「REST Client」(Huachao Mao)，点击请求上方 Send Request
+# 启动后端: cd backend && uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+@baseUrl = http://127.0.0.1:8000
+@api = {{baseUrl}}/api/v1
+
+# 与契约示例一致；按需改为可连通的 PostgreSQL
+@name = my-postgres
+@pgUrl = postgres://postgres:postgres@localhost:5432/postgres
+
+###############################################################################
+### 契约 §1 — GET /api/v1/dbs — 获取所有已保存的数据库连接（200，可为 []）
+GET {{api}}/dbs
+
+###############################################################################
+### 契约 §2 — PUT /api/v1/dbs/{name} — 添加或更新连接（201 新建 / 200 更新）
+PUT {{api}}/dbs/{{name}}
+Content-Type: application/json
+
+{
+  "url": "{{pgUrl}}"
+}
+
+###############################################################################
+### 契约 §2 — 错误示例：URL 非法（400，error 依实现可能为 invalid_request）
+### 取消下一行注释可测（需将 @badName 改为合法 name 或沿用 @name）
+# @badUrl = http://example.com/not-postgres
+# PUT {{api}}/dbs/{{name}}
+# Content-Type: application/json
+#
+# {
+#   "url": "{{badUrl}}"
+# }
+
+###############################################################################
+### 契约 §3 — GET /api/v1/dbs/{name} — 获取元数据（200；有缓存则直出）
+GET {{api}}/dbs/{{name}}
+
+###############################################################################
+### 契约 §3 — GET /api/v1/dbs/{name}?refresh=true — 强制刷新元数据缓存
+GET {{api}}/dbs/{{name}}?refresh=true
+
+###############################################################################
+### 契约 §3 — 错误示例：连接名不存在（404 connection_not_found）
+### 将不存在的名称换入路径即可
+# GET {{api}}/dbs/non-existent-connection
+
+###############################################################################
+### 契约 §4 — POST /api/v1/dbs/{name}/query — 执行 SQL（仅 SELECT；无 LIMIT 时服务端追加 LIMIT 1000）
+POST {{api}}/dbs/{{name}}/query
+Content-Type: application/json
+
+{
+  "sql": "SELECT * FROM users WHERE email LIKE '%@example.com'"
+}
+
+###############################################################################
+### 契约 §4 — 成功响应形态参考（需库中存在 users 等表；否则由 PG 报错）
+### 可改为本库存在的表做冒烟
+POST {{api}}/dbs/{{name}}/query
+Content-Type: application/json
+
+{
+  "sql": "SELECT 1 AS one"
+}
+
+###############################################################################
+### 契约 §4 — 错误：非 SELECT（400 forbidden_statement，文案依实现略有差异）
+# POST {{api}}/dbs/{{name}}/query
+# Content-Type: application/json
+#
+# {
+#   "sql": "DROP TABLE users"
+# }
+
+###############################################################################
+### 契约 §4 — 错误：多条语句（400 multiple_statements）
+# POST {{api}}/dbs/{{name}}/query
+# Content-Type: application/json
+#
+# {
+#   "sql": "SELECT 1; SELECT 2"
+# }
+
+###############################################################################
+### 契约 §5 — POST /api/v1/dbs/{name}/query/natural — 自然语言生成 SQL（200，不自动执行）
+### 需 OPENAI_API_KEY；若 Phase 3 未实现该路由则 404，可整段注释后再测
+POST {{api}}/dbs/{{name}}/query/natural
+Content-Type: application/json
+
+{
+  "prompt": "查询最近注册的 10 名用户的邮箱"
+}
+
+###############################################################################
+### 契约 §5 — 错误：元数据未加载（404 metadata_not_found）
+### 使用新连接名且未先 GET 元数据时可能出现
+# POST {{api}}/dbs/other-name/query/natural
+# Content-Type: application/json
+#
+# {
+#   "prompt": "任意"
+# }

@@ -1,0 +1,14 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - link "← 返回列表" [ref=e7] [cursor=pointer]:
+      - /url: /
+    - heading "查询：test-conn" [level=4] [ref=e9]
+  - generic [ref=e10]:
+    - strong [ref=e13]: 元数据
+    - generic [ref=e23]:
+      - generic [ref=e25]:
+        - strong [ref=e27]: SQL
+        - generic [ref=e29]: Loading...
+        - button "执 行" [ref=e30] [cursor=pointer]:
+          - generic [ref=e31]: 执 行
+      - strong [ref=e35]: 结果

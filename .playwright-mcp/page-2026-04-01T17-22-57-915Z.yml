@@ -1,0 +1,37 @@
+- generic [ref=e1]:
+  - generic [ref=e4]:
+    - heading "数据库连接" [level=3] [ref=e5]
+    - generic [ref=e6]:
+      - generic [ref=e9]: 添加连接
+      - generic [ref=e11]:
+        - generic [ref=e13]:
+          - generic "连接名称" [ref=e15]: "* 连接名称"
+          - textbox "* 连接名称" [ref=e19]:
+            - /placeholder: 例如 my-postgres
+            - text: e2e-test
+        - generic [ref=e21]:
+          - generic "数据库 URL" [ref=e23]: "* 数据库 URL"
+          - textbox "* 数据库 URL" [ref=e27]:
+            - /placeholder: postgres://user:pass@host:5432/dbname
+            - text: http://example.com/bad
+        - button "保存连接" [active] [ref=e33] [cursor=pointer]:
+          - generic [ref=e34]: 保存连接
+    - generic [ref=e35]:
+      - generic [ref=e38]: 已保存的连接
+      - table [ref=e53]:
+        - rowgroup [ref=e59]:
+          - row "名称 URL 创建时间 操作" [ref=e60]:
+            - columnheader "名称" [ref=e61]
+            - columnheader "URL" [ref=e62]
+            - columnheader "创建时间" [ref=e63]
+            - columnheader "操作" [ref=e64]
+        - rowgroup [ref=e65]:
+          - row "暂无数据 暂无数据" [ref=e66]:
+            - cell "暂无数据 暂无数据" [ref=e67]:
+              - generic [ref=e68]:
+                - img "暂无数据" [ref=e70]
+                - generic [ref=e76]: 暂无数据
+  - generic [ref=e78]:
+    - img "close-circle" [ref=e79]:
+      - img [ref=e80]
+    - generic [ref=e82]: 连接 URL 格式不正确，必须以 postgres:// 或 postgresql:// 开头
