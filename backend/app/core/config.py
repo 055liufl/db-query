@@ -1,9 +1,11 @@
+from functools import lru_cache
 from pathlib import Path
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# backend 根目录（容器内即 /app）。用绝对路径读 .env；本地 uv run 读文件，Docker 中由 compose env_file 注入环境变量
+# backend 根目录（容器内即 /app）。绝对路径读 .env；本地 uv run 读文件；
+# Docker 由 compose env_file 注入环境变量。
 _BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 _DOTENV_PATH = _BACKEND_ROOT / ".env"
 
@@ -37,5 +39,11 @@ class Settings(BaseSettings):
         return str(v).strip().rstrip("/")
 
 
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
+
+
+def clear_settings_cache() -> None:
+    """Clear get_settings cache after env patches in tests or hot-reload in dev."""
+    get_settings.cache_clear()

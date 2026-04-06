@@ -5,6 +5,7 @@
 #   docker-compose build --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
 #                        --build-arg PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn backend
 # See docker-troubleshooting.md (UTF-8) for full notes. This file must stay ASCII-only for old docker-compose on Windows (GBK).
+# Use 3.3 for Docker Toolbox / old docker-compose (3.9+ may error as "unsupported").
 version: "3.3"
 
 services:
@@ -28,6 +29,8 @@ services:
     build: ./backend
     ports:
       - "8000:8000"
+    depends_on:
+      - postgres
     # OPENAI_*: inject via env_file (host backend/.env). Avoid bind-mounting ./backend/.env to /app/.env:
     # if host once had a directory named .env, Docker would mount a directory and break Pydantic.
     env_file:

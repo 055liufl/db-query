@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.services.query import validate_and_prepare_sql
 
 

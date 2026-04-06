@@ -1,0 +1,26 @@
+# Optional: pytest + Vitest in containers (same as CI). Not started by `docker-compose up`.
+# Usage (from repo root, with postgres up):
+#   docker-compose -f docker-compose.yml -f docker-compose.test.yml run --rm backend-test
+#   docker-compose -f docker-compose.yml -f docker-compose.test.yml run --rm frontend-test
+version: "3.3"
+
+services:
+  backend-test:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.test
+    env_file:
+      - ./backend/.env
+    environment:
+      DB_QUERY_PATH: /root/.db_query
+      POSTGRES_INTEGRATION_URL: postgresql://postgres:postgres@postgres:5432/postgres
+    depends_on:
+      - postgres
+    volumes:
+      - db_query_data:/root/.db_query
+
+  frontend-test:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    command: ["npm", "test"]

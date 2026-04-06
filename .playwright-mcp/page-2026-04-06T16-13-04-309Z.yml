@@ -1,0 +1,13 @@
+- generic [ref=e5]:
+  - complementary [ref=e6]:
+    - generic [ref=e7]:
+      - heading "DB Query" [level=5] [ref=e8]
+      - text: 只读 SQL · PostgreSQL
+    - button "plus 添加连接" [ref=e10] [cursor=pointer]:
+      - img "plus" [ref=e12]:
+        - img [ref=e13]
+      - generic [ref=e16]: 添加连接
+    - generic [ref=e17]:
+      - generic [ref=e18]: 数据库
+      - text: 加载中…
+  - generic [ref=e21]: 加载中…

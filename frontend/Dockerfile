@@ -3,8 +3,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-COPY frontend/package.json ./
-RUN npm install
+# Lockfile keeps Vitest/devDeps in sync with CI (npm ci).
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
 
 COPY frontend/ ./
 COPY site/ /site

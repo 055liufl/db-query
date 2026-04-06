@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12-slim AS base
 
 WORKDIR /app
 
@@ -30,6 +30,22 @@ RUN set -e; \
     pip install --no-cache-dir --progress-bar off --default-timeout 600 --retries 20 \
         -i "${PIP_INDEX_URL}" $EXTRA .
 
+# Dev deps + tests: CI parity (ruff/mypy/pytest) and docker-compose profile `test`.
+# Build: docker build --target test ./backend
+FROM base AS test
+# ARG does not carry across FROM; empty PIP_INDEX_URL breaks pip -i and hatchling fetch.
+ARG PIP_INDEX_URL=https://pypi.org/simple
+ARG PIP_TRUSTED_HOST=
+COPY tests ./tests
+RUN set -e; \
+    EXTRA=""; \
+    if [ -n "$PIP_TRUSTED_HOST" ]; then EXTRA="--trusted-host $PIP_TRUSTED_HOST"; fi; \
+    pip install --no-cache-dir --progress-bar off --default-timeout 600 --retries 20 \
+        -i "${PIP_INDEX_URL}" $EXTRA ".[dev]"
+CMD ["python", "-m", "pytest", "-q"]
+
+# Default image: production API only (last stage = default `docker build` target).
+FROM base AS runtime
 EXPOSE 8000
 
 # Use asyncio+h11 so Docker Toolbox / small VMs avoid uvloop/httptools issues (uvicorn[standard] defaults).

@@ -180,11 +180,12 @@ async def post_natural_query(name: str, body: NaturalQueryRequest) -> NaturalQue
             "metadata_not_found",
             "尚未加载该数据库的元数据，请先访问 GET /api/v1/dbs/{name} 获取元数据",
         ) from None
-    except llm_service.NaturalQueryUnusableError:
+    except llm_service.NaturalQueryUnusableError as e:
         raise _http_error(
             status.HTTP_400_BAD_REQUEST,
             "natural_query_unusable",
             "无法理解该查询描述，请尝试更具体的表述",
+            e.detail,
         ) from None
     except llm_service.LlmUnavailableError as e:
         raise _http_error(

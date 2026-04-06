@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.5.x"
+      - name: Install backend (dev)
+        working-directory: backend
+        run: uv sync --extra dev
+      - name: Ruff
+        working-directory: backend
+        run: uv run ruff check app tests
+      - name: Mypy
+        working-directory: backend
+        run: uv run mypy
+      - name: Pytest
+        working-directory: backend
+        env:
+          POSTGRES_INTEGRATION_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+        run: uv run pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install and test
+        working-directory: frontend
+        run: npm install && npm test

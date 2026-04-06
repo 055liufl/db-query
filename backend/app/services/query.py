@@ -3,14 +3,13 @@ from __future__ import annotations
 import math
 import time
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 import asyncpg
-import sqlglot
 from sqlglot import exp
-from sqlglot.errors import ParseError
 
 from app.models.query import QueryColumn, QueryResult
+from app.services.sql_select import parse_single_select_statement
 
 
 def _json_safe_cell(value: Any) -> Any:
@@ -38,7 +37,8 @@ def _apply_limit_if_missing(stmt: exp.Expression, limit: int) -> exp.Expression:
     if isinstance(stmt, exp.With):
         inner = stmt.this
         if isinstance(inner, exp.Select) and inner.args.get("limit") is None:
-            return stmt.replace(inner, inner.limit(limit))
+            # sqlglot With.replace signature not fully typed for nested Select
+            return cast(exp.Expression, stmt.replace(inner, inner.limit(limit)))  # type: ignore[call-arg]
         return stmt
     return stmt
 
@@ -54,21 +54,7 @@ def _limit_was_missing(stmt: exp.Expression) -> bool:
 
 
 def validate_and_prepare_sql(sql: str) -> tuple[str, bool]:
-    try:
-        statements = sqlglot.parse(sql, dialect="postgres")
-    except ParseError as e:
-        msg = f"SQL 语法错误：{e}"
-        raise ValueError(msg) from e
-    if len(statements) != 1:
-        msg = "每次仅允许提交一条 SQL 语句"
-        raise ValueError(msg)
-    stmt = statements[0]
-    if isinstance(stmt, exp.Union):
-        msg = "暂不支持 UNION 查询"
-        raise ValueError(msg)
-    if not isinstance(stmt, (exp.Select, exp.With)):
-        msg = "仅允许执行 SELECT 查询"
-        raise ValueError(msg)
+    stmt = parse_single_select_statement(sql)
     missing = _limit_was_missing(stmt)
     final_stmt = _apply_limit_if_missing(stmt, 1000) if missing else stmt
     final_sql = final_stmt.sql(dialect="postgres")

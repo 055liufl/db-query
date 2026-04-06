@@ -7,7 +7,7 @@ import type {
   QueryResult,
 } from "../types/query";
 
-function apiRoot(): string {
+export function apiRoot(): string {
   const fromEnv = import.meta.env.VITE_API_BASE_URL?.trim();
   if (fromEnv) {
     return fromEnv.replace(/\/$/, "");

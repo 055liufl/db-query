@@ -1,178 +1,239 @@
 # Docker 排障与约定（db-query）
 
-本文件为 **Docker / Compose / 浏览器 / 自然语言 SQL** 的**单一事实来源**，与 **`docker-compose.yml`**、**`backend/Dockerfile`**、**`backend/app/core/config.py`**、**`app/services/llm.py`**、**`app/main.py`** 当前实现一致。
+本文件为 **Docker / Compose / 浏览器 / 自然语言 SQL** 的单一事实来源，与 `docker-compose.yml`、`docker-compose.test.yml`、`backend/Dockerfile`、`backend/Dockerfile.test`、`frontend/Dockerfile` 及后端当前实现一致。
 
 ---
 
-## 1. 旧版 `docker-compose` 与 YAML
+## 1. 快速开始（Compose）
+
+1. `cp backend/.env.example backend/.env`，填写 `OPENAI_API_KEY`（自然语言 SQL 需要；可选 `OPENAI_BASE_URL`、`OPENAI_MODEL`）。
+2. 仓库根目录执行：`docker-compose up --build`。
+3. 浏览器访问（Docker Toolbox 用虚拟机 IP，勿用 `localhost` 代替 VM）：
+   - 前端：`http://<docker-machine-ip>:3000`
+   - API / Swagger：`http://<docker-machine-ip>:8000/docs`  
+   获取 IP：`docker-machine ip default`（示例：`192.168.99.100`）。
+4. 修改 `.env` 后：`docker-compose up -d --force-recreate backend`。
+
+**Compose 约定**：`backend` 使用 `env_file: ./backend/.env` 注入环境变量；**不要** bind-mount `./backend/.env` → `/app/.env`（宿主机若曾误建名为 `.env` 的目录，会挂载成目录导致崩溃）。**不要**用 `environment: OPENAI_*: ${...}` 空串覆盖 `env_file`。
+
+---
+
+## 2. 旧版 `docker-compose` 与 YAML
 
 | 问题 | 处理 |
 |------|------|
-| `UnicodeDecodeError: 'gbk' codec can't decode` | **`docker-compose.yml` 须 UTF-8，注释仅 ASCII**（勿中文、弯引号、长破折号 `—` 等）；或改用 **Compose V2**（`docker compose`） |
+| `UnicodeDecodeError: 'gbk' codec can't decode` | `docker-compose.yml` 须 **UTF-8**，注释**仅 ASCII**（勿中文、弯引号、长破折号）；或改用 **Compose V2**（`docker compose`） |
+| `Version ... is unsupported` 或仅支持 2.x/3.3 | 本仓库使用 **`version: "3.3"`** 以兼容旧版 Docker Toolbox；勿用 3.9+（会报错） |
 | `${VAR:-}` / invalid interpolation | 本仓库已避免；密钥用 **`env_file`** |
-| 版本 | **`version: "3.3"`** 兼容 Toolbox |
 
 ---
 
-## 2. 环境变量（`backend/.env`）
+## 3. 构建常见错误（镜像）
+
+### 3.1 `pip` / DNS / 超时
+
+| 现象 | 处理 |
+|------|------|
+| `Temporary failure in name resolution` | 在 VM 内修 DNS（见 `docker-compose.yml` 顶部注释），再 `docker-compose build --no-cache backend` |
+| `RuntimeError: can't start new thread`（pip/Rich） | `Dockerfile` 已设 `PIP_PROGRESS_BAR=off`；仍失败见 **§9** 加大 VM |
+| `ReadTimeoutError` / PyPI | 已加长 `PIP_DEFAULT_TIMEOUT` 与 `--retries`；可用 `build-arg` 国内镜像（见 `docker-compose.yml` 注释） |
+| `uv` / Tokio `PermissionDenied` | 镜像内使用 **pip**（非 uv）；本机开发可用 **`uv run`** |
+
+### 3.2 多阶段 `backend`：`test` 阶段 `pip install ".[dev]"` 失败
+
+**现象**：`index url "" seems invalid`、`Could not find hatchling`。
+
+**原因**：`ARG PIP_INDEX_URL` 在 `FROM base AS test` 新阶段**不继承**，展开为空。
+
+**处理**：已在 `backend/Dockerfile` 的 `test` 阶段重新声明 `ARG PIP_INDEX_URL` / `ARG PIP_TRUSTED_HOST`（见该文件）。若自建镜像，请保持与 `base` 阶段一致。
+
+### 3.3 前端：`npm ci` 失败
+
+**处理**：`frontend/Dockerfile` 使用 `package-lock.json` + `npm ci`；需保证 lockfile 与 `package.json` 一并提交。
+
+---
+
+## 4. 可选：容器内测试（`docker-compose.test.yml`）
+
+默认 **`docker-compose up`** 不启动测试服务。需显式合并文件（且依赖已起的 `postgres` 等同网络）：
+
+```bash
+docker-compose -f docker-compose.yml -f docker-compose.test.yml run --rm backend-test
+docker-compose -f docker-compose.yml -f docker-compose.test.yml run --rm frontend-test
+```
+
+- `backend-test`：使用 `backend/Dockerfile.test`（含 dev 依赖与 `tests/`）。  
+- `frontend-test`：同一前端镜像，命令为 `npm test`。
+
+---
+
+## 5. 环境变量（`backend/.env`）
 
 | 变量 | 说明 |
 |------|------|
-| **`OPENAI_API_KEY`** | 必填（自然语言 SQL）；不配则只能手写 SQL |
-| **`OPENAI_BASE_URL`** | 可选；不配则默认 **`https://api.openai.com/v1`**。须为 OpenAI 兼容网关的 **`.../v1`** 前缀；仅域名无路径时官方 **`api.openai.com`** 会在后端自动补 **`/v1`** |
-| **`OPENAI_MODEL`** | 可选；默认 **`gpt-4o-mini`**。第三方网关常限制模型，须与其文档/控制台一致 |
-| **`DB_QUERY_PATH`** | 可选；SQLite 数据目录 |
-
-**Compose**：**`env_file: ./backend/.env`** 在启动时注入进程环境；**不** bind-mount **`./backend/.env` → `/app/.env`**，避免宿主机曾误建 **`.env` 目录`** 导致挂载为目录、密钥读不到。Pydantic **`Settings`** 读环境变量（与本地读 **`backend/.env` 文件**等价）。
-
-首次：`cp backend/.env.example backend/.env` 并填写。修改后 **`docker-compose up -d --force-recreate backend`**。
-
-**勿**在 Compose 里用 **`environment: OPENAI_*: ${...}`** 空串覆盖 **`env_file`**。
+| `OPENAI_API_KEY` | 自然语言 SQL 需要；不配则仅手写 SQL |
+| `OPENAI_BASE_URL` | 可选；默认 `https://api.openai.com/v1`。须为 OpenAI 兼容网关的 `.../v1`；仅 `api.openai.com` 无路径时后端会补 `/v1` |
+| `OPENAI_MODEL` | 可选；默认 `gpt-4o-mini`（须与上游允许列表一致） |
+| `DB_QUERY_PATH` | 可选；SQLite 数据目录（容器内常用 `/root/.db_query`） |
 
 **自检（勿泄露完整 key）**：
 
 ```bash
-docker exec dbquery_backend_1 python -c "from app.core.config import get_settings; s=get_settings(); print('has_key:', bool(s.openai_api_key), 'model:', s.openai_model)"
+docker exec <backend容器名> python -c "from app.core.config import get_settings; s=get_settings(); print('has_key:', bool(s.openai_api_key), 'model:', s.openai_model)"
 ```
 
-**Git Bash** 路径被改写时：**`//`** 前缀或 **`export MSYS_NO_PATHCONV=1`**。
+容器名以 `docker ps` 为准（文档中 `dbquery_backend_1` 仅为示例）。
+
+**Git Bash** 路径被改写：`//` 前缀或 `export MSYS_NO_PATHCONV=1`。
 
 ---
 
-## 3. 构建 `backend` 镜像（`RUN pip install .`）
+## 6. PostgreSQL 与连接串
 
-| 现象 | 处理 |
-|------|------|
-| `Temporary failure in name resolution` | VM 内修 DNS（见 **`docker-compose.yml` 注释**），再 **`docker-compose build --no-cache backend`** |
-| **`RuntimeError: can't start new thread`**（pip/Rich） | **`Dockerfile`** 已 **`PIP_PROGRESS_BAR=off`**；仍失败则 **§9.1** 加大 VM 或本机 **`uv run`** |
-| `ReadTimeoutError` / PyPI | 已加长 **`PIP_DEFAULT_TIMEOUT`**、**`--retries`**；**`docker-compose.yml`** 注释含镜像 **`build-arg`** |
-| **`uv` / Tokio `PermissionDenied`** | 镜像用 **pip**；本机可用 **`uv run`** |
-| 不在容器里构建 | `cd backend && uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000` |
+单独起库：`docker-compose up -d postgres`；`docker ps` 应见 `0.0.0.0:5432->5432/tcp`。
 
----
+| 场景 | 连接串中的 host |
+|------|-----------------|
+| Docker Desktop（本机） | `127.0.0.1` |
+| Docker Toolbox | **`docker-machine ip default`**（在浏览器里填的 URL 用该 IP） |
 
-## 4. PostgreSQL 与连接串
-
-**单独起库**：`docker-compose up -d postgres`。**`docker ps`** 见 **`0.0.0.0:5432->5432/tcp`**。
-
-| 环境 | 连接串 host |
-|------|----------------|
-| Docker Desktop | `127.0.0.1` |
-| Docker Toolbox | **`docker-machine ip default`** |
-
-Backend **容器内**保存的 URL：**host 须为服务名 `postgres`**（如 **`postgresql://postgres:postgres@postgres:5432/postgres`**）。**`127.0.0.1` / `localhost`** 在容器内指向 backend 自身。
-
-**`POST .../query` 500**：看 JSON **`message` / `detail`**；纯文本 500 时 **`docker logs dbquery_backend_1`**。
+- **Backend 容器内**保存的 DSN：应指向服务名 **`postgres`**，例如 `postgresql://postgres:postgres@postgres:5432/postgres`。容器内 **`127.0.0.1` / `localhost`** 指向 backend 自身，不是 compose 里的 Postgres。
+- `POST .../query` 返回 500：看 JSON 的 `message` / `detail`；纯文本时 `docker logs <backend容器>`。
 
 ---
 
-## 5. 浏览器与 API（含 Failed to fetch）
+## 7. 浏览器与 API（含 Failed to fetch）
 
-Toolbox：**`http://<docker-machine-ip>:3000`** 与 **`:8000`**，勿用 **`localhost`** 当成 VM 上的 API。
+- Toolbox：访问 **`http://<docker-machine-ip>:3000`** 与 **`:8000`**，勿把 **`localhost`** 当成 VM 上的服务地址。
+- 未设置 **`VITE_API_BASE_URL`** 时，前端请求 **`当前页面主机名:8000`**；页面用 VM IP 却写死 `localhost:8000` 会 **Failed to fetch**。
+- 确认 **`http://<与页面同主机>:8000/docs`** 可打开。后端已 **CORS** 与 **Private Network Access** 头。
 
-**`api.ts`**：未设 **`VITE_API_BASE_URL`** 时请求 **`当前页面主机:8000`**。页面用 VM IP 却写死 **`localhost:8000`** 会 **Failed to fetch**。自定义基址需 **`VITE_API_BASE_URL`** 并**重建前端**。
-
-确认 **`http://<与页面同主机>:8000/docs`** 可打开。后端已 **CORS** 与 **Private Network Access** 头。
-
----
-
-## 6. `http://<IP>:8000` 无法打开 / `ERR_CONNECTION_REFUSED`
-
-1. **`docker ps -a`**：**`dbquery_backend_1`** 是否 **Up**，**`0.0.0.0:8000->8000/tcp`**。  
-2. **Exited**：**`docker logs dbquery_backend_1`**。  
-3. **端口冲突**：改 **`docker-compose.yml`** 的 **`ports`**，并与 **`VITE_API_BASE_URL`** 一致。
+**若希望用本机 `localhost` 访问 Toolbox 端口**：在 VirtualBox 的 `default` 虚拟机配置端口转发（如 8000→8000、3000→3000），或统一使用 `docker-machine ip`。
 
 ---
 
-## 7. `dbquery_backend_1` 启动失败
+## 8. `http://<IP>:8000` 无法打开 / `ERR_CONNECTION_REFUSED`
 
-**先查**：**`docker logs dbquery_backend_1`**。
+1. `docker ps -a`：backend 是否 **Up**，是否映射 `0.0.0.0:8000->8000/tcp`。  
+2. **Exited**：`docker logs <backend容器>`。  
+3. 端口冲突：改 `docker-compose.yml` 的 `ports`，并同步前端或 `VITE_API_BASE_URL`。
+
+---
+
+## 9. Backend 容器启动失败（线程 / 依赖）
+
+先查：`docker logs <backend容器>`。
 
 | 原因 | 处理 |
 |------|------|
-| **uvloop / httptools** | **`Dockerfile`**：**`uvicorn ... --loop asyncio --http h11`** |
-| **`can't start new thread`**（SQLite） | 已用标准库 **`sqlite3`**（无 **`aiosqlite`**） |
-| **`can't start new thread`**（自然语言） | **§8** |
-| 其它 | **§8**、**§9.1** |
+| **uvloop / httptools** | `Dockerfile` 使用 `uvicorn ... --loop asyncio --http h11` |
+| SQLite `can't start new thread` | 存储层使用标准库 **`sqlite3`**（无 aiosqlite 额外线程） |
+| 自然语言 / aiohttp `can't start new thread` | 见 **§10**；仍失败则 **§11** 加大 VM |
 
 ---
 
-## 8. 自然语言生成 SQL（LLM）
+## 10. 自然语言生成 SQL（LLM）
 
-### 8.1 响应 `error` 含义
+### 10.1 响应 `error` 含义
 
 | `error` | 含义 |
 |---------|------|
-| **`llm_unavailable`** | 无密钥、网络/上游 API 失败；**`detail`** 为摘要（**不含密钥**） |
-| **`natural_query_unusable`** | 模型输出无法解析为合法单条 **SELECT**（**400**） |
-| **`internal_error`** | 未捕获异常；**`detail`** 含类型与信息 |
+| `llm_unavailable` | 无密钥、网络/上游 API 失败；`detail` 为摘要（不含密钥） |
+| `natural_query_unusable` | 模型输出无法通过校验（如非单条 SELECT、列名不在元数据等）；**400** |
+| `internal_error` / 其它 | 未捕获异常；看 `detail` |
 
-### 8.2 后端实现（与排障相关）
+### 10.2 实现要点（与排障相关）
 
-- **HTTP**：**`aiohttp.ClientSession`** 请求 **`{OPENAI_BASE_URL}/chat/completions`**（OpenAI 兼容 JSON）。
-- **DNS**：自定义 **`AbstractResolver`**，在 **`resolve()`** 内**同步** **`socket.getaddrinfo`**（**不**用 **`asyncio` 默认线程池**、**不**用 **`aiodns`/`pycares`**——后者会引入额外线程，在 **Toolbox 小 VM / 低 nproc** 下易 **`RuntimeError: can't start new thread`**）。DNS 会短暂阻塞事件循环，可接受。
-- **官方域名**：若配置为 **`https://api.openai.com`** 或 **`http://api.openai.com`**（无 **`/v1`**），会**自动纠正**为 **`https://api.openai.com/v1`**。
-- **Compose**：**`shm_size` / `ulimits.nofile`** 见 **`docker-compose.yml`**；**`main.py`** 未处理异常返回 **JSON**。
+- HTTP：`aiohttp` 调 `{OPENAI_BASE_URL}/chat/completions`。
+- DNS：同步 `socket.getaddrinfo`（避免 aiodns/pycares 额外线程，适配 **Toolbox 低 nproc**）。
+- 官方域名无 `/v1` 时会纠正为 `https://api.openai.com/v1`。
+- Compose：`shm_size` / `ulimits.nofile` 见 `docker-compose.yml`。
 
-### 8.3 部署后自检
+### 10.3 自检
 
 ```bash
 curl -sS "http://127.0.0.1:8000/api/v1/health"
 ```
 
-应含 **`"llmTransport":"aiohttp"`**、**`"llmDns":"socket_sync"`**。若缺失或不对，说明**旧镜像**，需：
+应含 `"llmTransport":"aiohttp"`、`"llmDns":"socket_sync"`。不对则重建镜像：
 
 ```bash
 docker-compose build --no-cache backend
 docker-compose up -d --force-recreate backend
 ```
 
-### 8.4 按现象排查
+### 10.4 按现象排查
 
-| 现象 | 原因与处理 |
-|------|------------|
-| **`can't start new thread`** | 先 **8.3** 确认新镜像；仍失败则 **§9.1** 加大 VM 内存/CPU；本机 **`uv run`** 对比 |
-| **`JSONDecodeError` / 空体 / 响应为 HTML** | 请求打到了**网页**而非 API。核对 **`OPENAI_BASE_URL`** 为 **`https://.../v1`**；镜像站须与密钥**同一服务商**。容器内 **`curl`** 看 **Content-Type** 与正文是否 **`{`** 开头 |
-| **`HTTP 403` / `model_not_allowed`** | 默认 **`gpt-4o-mini`** 不被上游允许。在 **`backend/.env`** 设 **`OPENAI_MODEL`**（与上游返回列表一致），**`force-recreate backend`** |
-| **`HTTP 400` / `bad_response_status_code` / `openai_error`** | **第三方网关**转发上游失败（密钥、额度、地区/网络、上游故障）。在**网关控制台**查日志/额度；本应用仅发标准 **`/v1/chat/completions`** |
-| **`detail` 已解析为结构化中文** | 上游 **HTTP ≥400** 时，`detail` 会解析 **`error.type` / `error.message`** 并附简短提示 |
+| 现象 | 处理 |
+|------|------|
+| `JSONDecodeError` / 空体 / HTML | `OPENAI_BASE_URL` 须指向 API 而非网页；`curl` 看 Content-Type |
+| `HTTP 403` / `model_not_allowed` | 改 `OPENAI_MODEL` 与上游一致，`force-recreate backend` |
+| `HTTP 400` / 网关 `openai_error` | 核对密钥、额度、网关日志 |
+| **列不存在（执行后报错）** | 界面「刷新元数据」；自然语言优先 **`SELECT *`**，避免模型臆造列名 |
 
-**通用**：**`docker logs dbquery_backend_1`**；**`OPENAI_BASE_URL`** 须在容器内可解析、可访问。
+### 10.5 与本机 Codex CLI 的密钥（独立）
 
----
+| 用途 | 说明 |
+|------|------|
+| **Codex CLI**（若安装） | 本机终端写代码、跑命令。 |
+| **应用内自然语言 SQL** | 仅由 **`OPENAI_API_KEY`**（与 `backend/.env` / compose `env_file`）注入。 |
 
-## 9. Docker Toolbox：VirtualBox 与 Codex
+两者独立；不必在镜像内安装 Codex。
 
-### 9.1 增大 VirtualBox / Docker Machine 资源
+**本机临时 `uv run`（非 Docker）**：
 
-Toolbox 的 Linux 在 **VirtualBox**（多为 **`default`**）。内存/CPU 过小易出现 **线程/构建** 问题。修改后 **`docker-machine start default`** 再 **`docker-compose up`**。
-
-**图形界面（推荐）**
-
-1. **`docker-machine stop default`**
-2. **VirtualBox** → 选中 **`default`**
-3. **设置 → 系统 → 主板**：内存例如 **4096～8192 MB**
-4. **设置 → 系统 → 处理器**：例如 **4** 核
-5. **`docker-machine start default`**
-
-**命令行**（先 **`docker-machine stop default`**）。**勿在 Git Bash 用** **`%ProgramFiles%`**（**`%`** 在 bash 中为作业号）。
-
-- **CMD**：`"%ProgramFiles%\Oracle\VirtualBox\VBoxManage.exe" modifyvm default --memory 8192 --cpus 4`
-- **PowerShell**：`& "$env:ProgramFiles\Oracle\VirtualBox\VBoxManage.exe" modifyvm default --memory 8192 --cpus 4`
-- **Git Bash**：`"/c/Program Files/Oracle/VirtualBox/VBoxManage.exe" modifyvm default --memory 8192 --cpus 4`
-
-**Docker Desktop（WSL2）** 用户在 Desktop **Settings → Resources** 调资源，勿用本节 VirtualBox 步骤。
-
-### 9.2 Codex CLI
-
-装在本机即可；**`curl`/浏览器** 测 API 用 **`docker-machine ip`** 的 **IP + 端口**。
-
----
-
-## 10. `fixtures/seed.sql`
-
-```bash
-docker exec -i dbquery_postgres_1 psql -U postgres -d postgres -v ON_ERROR_STOP=1 < fixtures/seed.sql
+```powershell
+$env:OPENAI_API_KEY="sk-..."
+cd backend; uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-容器名以 **`docker ps`** 为准。
+---
+
+## 11. Docker Toolbox：VirtualBox 资源
+
+Toolbox 的 Linux 在 VirtualBox（多为 `default`）。内存/CPU 过小易出现线程/构建问题。
+
+1. `docker-machine stop default`
+2. VirtualBox → 选中 `default` → **设置 → 系统**：内存（如 4096～8192 MB）、处理器（如 4 核）
+3. `docker-machine start default`
+
+**PowerShell 示例**（先 `docker-machine stop default`）：
+
+```powershell
+& "$env:ProgramFiles\Oracle\VirtualBox\VBoxManage.exe" modifyvm default --memory 8192 --cpus 4
+```
+
+**Docker Desktop（WSL2）** 用户在 Desktop **Settings → Resources** 调整，勿用本节 VirtualBox 步骤。
+
+---
+
+## 12. `fixtures/seed.sql`
+
+```bash
+docker exec -i <postgres容器名> psql -U postgres -d postgres -v ON_ERROR_STOP=1 < fixtures/seed.sql
+```
+
+容器名以 `docker ps` 为准。
+
+---
+
+## 13. CI 与本地测试（摘要）
+
+| 场景 | 命令 |
+|------|------|
+| 后端 | `cd backend && uv sync --extra dev && uv run ruff check app tests && uv run mypy && uv run pytest` |
+| 集成测试 | 设置 `POSTGRES_INTEGRATION_URL` 后运行 pytest |
+| 前端 | `cd frontend && npm install && npm test` |
+
+详见仓库根目录 **`README.md`** 与 **`.github/workflows/ci.yml`**。
+
+---
+
+## 14. 不在容器内构建时
+
+```bash
+cd backend && uv run uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+cd frontend && npm run dev
+```
+
+默认 API：`http://127.0.0.1:8000`；前端可设 `VITE_API_BASE_URL`。

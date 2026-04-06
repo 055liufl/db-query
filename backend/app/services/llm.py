@@ -2,20 +2,21 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import socket
 from typing import Any
 
 import aiohttp
 from aiohttp.abc import AbstractResolver, ResolveResult
-import sqlglot
 from sqlglot import exp
-from sqlglot.errors import ParseError
 
 from app.core.config import Settings, get_settings
+from app.models.metadata import DbMetadataResponse
 from app.services.metadata import parse_cached_metadata
+from app.services.sql_select import parse_single_select_statement
 from app.storage import sqlite as sqlite_storage
 
-# Sync socket.getaddrinfo in resolver hook: no asyncio thread pool, no aiodns/pycares background threads (Toolbox nproc).
+# Sync socket.getaddrinfo: no asyncio thread pool, no aiodns/pycares threads (Toolbox nproc).
 LLM_HTTP_TRANSPORT = "aiohttp"
 LLM_DNS_RESOLVER = "socket_sync"
 
@@ -75,7 +76,7 @@ class _SyncSocketResolver(AbstractResolver):
             out.append(
                 {
                     "hostname": host,
-                    "host": ip,
+                    "host": str(ip),
                     "port": int(p),
                     "family": fam,
                     "proto": int(proto),
@@ -89,6 +90,8 @@ class _SyncSocketResolver(AbstractResolver):
 
     async def close(self) -> None:
         return None
+
+
 _HTTP_LOCK = asyncio.Lock()
 _aio_session: aiohttp.ClientSession | None = None
 _aio_session_key: tuple[str, str | None] | None = None
@@ -143,6 +146,11 @@ async def close_openai_client() -> None:
 class NaturalQueryUnusableError(Exception):
     """LLM 输出为空、无法解析为单条 SELECT，或语义不可用。"""
 
+    def __init__(self, detail: str | None = None) -> None:
+        cleaned = _strip_terminal_noise(detail) if detail else None
+        self.detail = cleaned or None
+        super().__init__("natural_query_unusable")
+
 
 class LlmUnavailableError(Exception):
     """无密钥、网络、OpenAI API 错误等；public_detail 可安全返回给客户端（勿含密钥）。"""
@@ -157,6 +165,15 @@ def _safe_exc(e: BaseException, *, max_len: int = 500) -> str:
     return s if len(s) <= max_len else f"{s[: max_len - 3]}..."
 
 
+def _strip_terminal_noise(s: str) -> str:
+    """Remove ANSI + broken Rich fragments so API/JSON clients do not show [4m-style junk."""
+    if not s:
+        return s
+    out = re.sub(r"\x1b\[[0-9;]*m", "", s)
+    out = re.sub(r"\[[0-9;]*m", "", out)
+    return out.strip()
+
+
 def _strip_code_fence(text: str) -> str:
     t = text.strip()
     if not t.startswith("```"):
@@ -169,19 +186,150 @@ def _strip_code_fence(text: str) -> str:
     return "\n".join(lines).strip()
 
 
+_LEADING_SELECT_OR_WITH = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
+
+
+def _normalize_llm_select_fragment(sql: str) -> str:
+    """Some models return `col1, col2 FROM t` without SELECT; sqlglot cannot tokenize that."""
+    s = sql.strip()
+    if not s:
+        return s
+    if _LEADING_SELECT_OR_WITH.match(s):
+        return s
+    if re.search(r"\bfrom\b", s, re.IGNORECASE):
+        return f"SELECT {s}"
+    return s
+
+
+def _message_content_to_str(content: Any) -> str:
+    """OpenAI-compatible message.content: string or list of {type,text} blocks (some gateways)."""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, dict):
+                if block.get("type") == "text" and isinstance(block.get("text"), str):
+                    parts.append(block["text"])
+                elif isinstance(block.get("text"), str):
+                    parts.append(block["text"])
+            elif isinstance(block, str):
+                parts.append(block)
+        return "".join(parts).strip()
+    return ""
+
+
+def _extract_sql_candidates(text: str) -> list[str]:
+    """When the model mixes English/Chinese with SQL, take snippets that look like real queries.
+
+    Prefer the *last* ``SELECT`` occurrence: phrases like "select all users" must not win over
+    ``SELECT * FROM ...`` later in the same line.
+    """
+    t = text.strip()
+    if not t:
+        return []
+    out: list[str] = []
+    if re.match(r"(?is)\s*with\b", t):
+        m = re.search(r"(?is)\bwith\b[\s\S]+?(?:;|\Z)", t)
+        if m:
+            chunk = m.group(0).strip().rstrip(";").strip()
+            if chunk and chunk not in out:
+                out.append(chunk)
+    starts = [m.start() for m in re.finditer(r"(?i)\bselect\b", t)]
+    for start in reversed(starts):
+        chunk = t[start:]
+        if ";" in chunk:
+            chunk = chunk.split(";")[0]
+        chunk = chunk.strip()
+        if chunk and chunk not in out:
+            out.append(chunk)
+    return out
+
+
+def _validate_llm_columns_against_metadata(sql: str, meta: DbMetadataResponse) -> None:
+    """Reject obvious hallucinated column names for a single-table SELECT (before hitting Postgres)."""
+    try:
+        tree = parse_single_select_statement(sql)
+    except ValueError:
+        return
+    if isinstance(tree, exp.With):
+        return
+    if not isinstance(tree, exp.Select):
+        return
+    tables = list(tree.find_all(exp.Table))
+    if len(tables) != 1:
+        return
+    tbl = tables[0]
+    sch_raw = tbl.db if tbl.db is not None else "public"
+    sch_name = sch_raw.name if isinstance(sch_raw, exp.Identifier) else str(sch_raw)
+    t_raw = tbl.name
+    tname = t_raw.name if isinstance(t_raw, exp.Identifier) else str(t_raw)
+    allowed: set[str] = set()
+    for ti in meta.tables:
+        if ti.schema_name.casefold() == sch_name.casefold() and ti.table_name.casefold() == tname.casefold():
+            allowed = {c.name for c in ti.columns}
+            break
+    else:
+        return
+    allowed_l = {x.casefold() for x in allowed}
+    for col in tree.expressions:
+        if isinstance(col, exp.Star):
+            continue
+        if isinstance(col, exp.Alias):
+            inner = col.this
+        else:
+            inner = col
+        if isinstance(inner, exp.Column):
+            cname = inner.name
+            if not cname:
+                continue
+            if cname not in allowed and cname.casefold() not in allowed_l:
+                sample = sorted(allowed, key=str.casefold)[:24]
+                tail = " …" if len(allowed) > 24 else ""
+                raise NaturalQueryUnusableError(
+                    detail=(
+                        f"Schema 中不存在列 {cname!r}；该表可用列：{sample}{tail}。"
+                        "不确定时请使用 SELECT *。"
+                    )
+                )
+
+
+def _coerce_llm_reply_to_select(raw: str) -> str:
+    """Strip fences, try plain body then regex fallback; normalize + validate; raise with detail."""
+    if not raw.strip():
+        raise NaturalQueryUnusableError(detail="模型未返回文本内容（或 content 非字符串/数组）")
+
+    candidates: list[str] = []
+    stripped = _strip_code_fence(raw)
+    if stripped:
+        candidates.append(stripped)
+    for fb in _extract_sql_candidates(raw):
+        if fb not in candidates:
+            candidates.append(fb)
+
+    last_detail: str | None = None
+    for cand in candidates:
+        sql = _normalize_llm_select_fragment(cand.strip())
+        if not sql:
+            continue
+        try:
+            parse_single_select_statement(sql)
+        except ValueError as e:
+            last_detail = str(e)
+            continue
+        else:
+            return sql
+    raise NaturalQueryUnusableError(
+        detail=last_detail or "未解析出可执行的 SELECT（模型可能只返回了说明文字）",
+    )
+
+
 def _validate_generated_select(sql: str) -> None:
     """确保为单条 PostgreSQL SELECT（与 execute 前校验一致，此处不追加 LIMIT）。"""
     try:
-        statements = sqlglot.parse(sql, dialect="postgres")
-    except ParseError:
-        raise NaturalQueryUnusableError() from None
-    if len(statements) != 1:
-        raise NaturalQueryUnusableError()
-    stmt = statements[0]
-    if isinstance(stmt, exp.Union):
-        raise NaturalQueryUnusableError()
-    if not isinstance(stmt, (exp.Select, exp.With)):
-        raise NaturalQueryUnusableError()
+        parse_single_select_statement(sql)
+    except ValueError as e:
+        raise NaturalQueryUnusableError(detail=str(e)) from None
 
 
 def _format_upstream_http_error(status: int, body_text: str) -> str:
@@ -226,7 +374,7 @@ def _parse_chat_content(data: dict[str, Any]) -> str:
     if not isinstance(msg, dict):
         raise LlmUnavailableError("OpenAI 响应中无 message")
     content = msg.get("content")
-    return (content or "").strip() if isinstance(content, str) else ""
+    return _message_content_to_str(content)
 
 
 async def generate_select_sql(connection_name: str, user_prompt: str) -> str:
@@ -246,8 +394,14 @@ async def generate_select_sql(connection_name: str, user_prompt: str) -> str:
     system = (
         "你是 PostgreSQL SQL 专家。下面 JSON 是数据库表结构（camelCase 字段名）。\n"
         "规则：\n"
-        "1. 只输出一条 SELECT 语句，不要 Markdown、不要解释。\n"
+        "1. 只输出一条完整 SELECT 语句，必须以 SELECT 或 WITH 开头；"
+        "不要只输出列清单加 FROM（例如必须先写 SELECT 列名... FROM ...）。"
+        "不要写英文/中文说明句（例如不要写 “select all users …” 这类话）；不要 Markdown、不要解释。\n"
         "2. 使用标准 PostgreSQL 语法。\n"
+        "3. 列名与表名必须严格来自下方 Schema JSON 的 tables[].columns[].name 与 "
+        "schema_name/table_name；禁止臆造列名（例如未在 JSON 中出现则不得使用 username、"
+        "name 等“常见”字段名）。若用户未指定列名或你不确定应选哪些列，请使用 SELECT * "
+        "（或 WITH 内仅引用 JSON 中存在的对象）。\n"
         f"\nSchema JSON:\n{meta_json}"
     )
 
@@ -276,7 +430,8 @@ async def generate_select_sql(connection_name: str, user_prompt: str) -> str:
                 stripped = stripped[1:].strip()
             if not stripped:
                 raise LlmUnavailableError(
-                    "API 返回空响应体（HTTP 200）。请检查 OPENAI_BASE_URL 是否指向正确的 OpenAI 兼容接口、代理是否截断响应。"
+                    "API 返回空响应体（HTTP 200）。请检查 OPENAI_BASE_URL 是否指向正确的 "
+                    "OpenAI 兼容接口、代理是否截断响应。"
                 )
             if stripped.lstrip().startswith("<"):
                 raise LlmUnavailableError(
@@ -300,11 +455,6 @@ async def generate_select_sql(connection_name: str, user_prompt: str) -> str:
         raise LlmUnavailableError(_safe_exc(e)) from e
 
     raw = _parse_chat_content(data)
-    if not raw:
-        raise NaturalQueryUnusableError()
-
-    sql = _strip_code_fence(raw)
-    if not sql:
-        raise NaturalQueryUnusableError()
-    _validate_generated_select(sql)
+    sql = _coerce_llm_reply_to_select(raw)
+    _validate_llm_columns_against_metadata(sql, meta)
     return sql

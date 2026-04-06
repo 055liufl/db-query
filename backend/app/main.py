@@ -9,16 +9,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
-logger = logging.getLogger(__name__)
-
 from app.core.config import get_settings
 from app.routers import dbs
 from app.services.llm import LLM_DNS_RESOLVER, LLM_HTTP_TRANSPORT, close_openai_client
 from app.storage import sqlite as sqlite_storage
 
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     settings = get_settings()
     db_file = settings.db_query_path / "db_query.db"
     sqlite_storage.configure(db_file)

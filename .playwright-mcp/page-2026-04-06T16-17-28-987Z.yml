@@ -1,0 +1,95 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e5]:
+    - complementary [ref=e6]:
+      - generic [ref=e7]:
+        - heading "DB Query" [level=5] [ref=e8]
+        - text: 只读 SQL · PostgreSQL
+      - button "plus 添加连接" [ref=e10] [cursor=pointer]:
+        - img "plus" [ref=e12]:
+          - img [ref=e13]
+        - generic [ref=e16]: 添加连接
+      - generic [ref=e17]:
+        - generic [ref=e18]: 数据库
+        - list [ref=e22]:
+          - listitem [ref=e23]:
+            - button "postgres 编辑 postgres 删除 postgres" [ref=e24] [cursor=pointer]:
+              - generic [ref=e25]: postgres
+              - generic [ref=e26]:
+                - button "编辑 postgres" [ref=e27]:
+                  - img "edit" [ref=e29]:
+                    - img [ref=e30]
+                - button "删除 postgres" [ref=e32]:
+                  - img "delete" [ref=e34]:
+                    - img [ref=e35]
+    - generic [ref=e20]:
+      - complementary [ref=e37]:
+        - generic [ref=e38]:
+          - generic [ref=e39]:
+            - img "database" [ref=e40]:
+              - img [ref=e41]
+            - strong [ref=e44]: Schema
+          - generic [ref=e45]:
+            - textbox "搜索数据库、表…" [ref=e46]
+            - button "刷新元数据" [ref=e48] [cursor=pointer]:
+              - img "reload" [ref=e50]:
+                - img [ref=e51]
+          - generic [ref=e53]: 缓存 2026/4/5 15:48:11
+          - generic [ref=e54]: 双击表名可插入 SELECT 模板
+          - generic [ref=e56]:
+            - generic:
+              - textbox "for screen reader"
+            - tree [ref=e57]:
+              - generic [ref=e60]:
+                - treeitem "minus-square public.users" [expanded] [ref=e61]:
+                  - img "minus-square" [ref=e63] [cursor=pointer]:
+                    - img [ref=e64]
+                  - generic "public.users" [ref=e67] [cursor=pointer]:
+                    - generic [ref=e68]: public.users
+                - treeitem "id · integer" [ref=e69]:
+                  - generic "id · integer" [ref=e74] [cursor=pointer]:
+                    - generic [ref=e75]: id · integer
+                - treeitem "email · text" [ref=e76]:
+                  - generic "email · text" [ref=e81] [cursor=pointer]:
+                    - generic [ref=e82]: email · text
+                - treeitem "display_name · text" [ref=e83]:
+                  - generic "display_name · text" [ref=e88] [cursor=pointer]:
+                    - generic [ref=e89]: display_name · text
+                - treeitem "created_at · timestamp with time zone" [ref=e90]:
+                  - generic "created_at · timestamp with time zone" [ref=e95] [cursor=pointer]:
+                    - generic [ref=e96]: created_at · timestamp with time zone
+      - main [ref=e97]:
+        - generic [ref=e98]:
+          - generic [ref=e99]:
+            - img "table" [ref=e100]:
+              - img [ref=e101]
+            - generic [ref=e103]: postgres
+          - button "play-circle Execute Query" [ref=e104] [cursor=pointer]:
+            - img "play-circle" [ref=e106]:
+              - img [ref=e107]
+            - generic [ref=e110]: Execute Query
+        - generic [ref=e112]: Query · 00:17:17
+        - generic [ref=e113]:
+          - generic [ref=e114]: 自然语言
+          - textbox "用中文或英文描述想查的数据，例如：查询所有用户的邮箱" [ref=e115]
+          - button "thunderbolt 生成 SQL" [ref=e116] [cursor=pointer]:
+            - img "thunderbolt" [ref=e118]:
+              - img [ref=e119]
+            - generic [ref=e121]: 生成 SQL
+        - code [ref=e126]:
+          - generic [ref=e127]:
+            - textbox "Editor content" [ref=e128]
+            - textbox [ref=e129]
+            - generic [ref=e134]: "1"
+            - generic [ref=e140]: SELECT 1 AS one
+        - generic [ref=e142]:
+          - heading "结果" [level=5] [ref=e143]
+          - generic [ref=e145]:
+            - img "table" [ref=e146]:
+              - img [ref=e147]
+            - generic [ref=e149]:
+              - text: 点击
+              - strong [ref=e150]: Execute Query
+              - text: 运行 SQL，结果将出现在此区域
+  - generic [ref=e151]:
+    - alert
+    - alert

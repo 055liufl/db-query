@@ -1,3 +1,5 @@
+/// <reference types="vitest/config" />
+
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -19,5 +21,9 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ["monaco-editor"],
+  },
+  test: {
+    environment: "jsdom",
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
   },
 });
