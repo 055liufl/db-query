@@ -9,6 +9,9 @@ ENV PIP_PROGRESS_BAR=off
 # Slow / cross-border networks: avoid ReadTimeoutError on files.pythonhosted.org (large wheels e.g. asyncpg)
 ENV PIP_DEFAULT_TIMEOUT=600
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+# pip 25+ / 镜像源：若出现 "THESE PACKAGES DO NOT MATCH THE HASHES"，勿强制校验哈希（或 wheel 与锁不一致）
+ENV PIP_REQUIRE_HASHES=0
+ENV PIP_CONSTRAINT=
 
 # 构建时可通过 --build-arg 覆盖，例如国内镜像：
 #   docker build --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple \
@@ -19,12 +22,13 @@ ARG PIP_TRUSTED_HOST=
 COPY pyproject.toml .
 COPY app ./app
 
+# Use pip only (not `uv pip`): `uv` can panic with Tokio PermissionDenied on Docker Toolbox / restricted seccomp.
 # Do not run "pip install -U pip": it pulls from files.pythonhosted.org and often times out on slow links.
 RUN set -e; \
-    TH=""; \
-    if [ -n "$PIP_TRUSTED_HOST" ]; then TH="--trusted-host $PIP_TRUSTED_HOST"; fi; \
+    EXTRA=""; \
+    if [ -n "$PIP_TRUSTED_HOST" ]; then EXTRA="--trusted-host $PIP_TRUSTED_HOST"; fi; \
     pip install --no-cache-dir --progress-bar off --default-timeout 600 --retries 20 \
-    . -i "${PIP_INDEX_URL}" $TH
+        -i "${PIP_INDEX_URL}" $EXTRA .
 
 EXPOSE 8000
 

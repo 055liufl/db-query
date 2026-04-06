@@ -1,5 +1,11 @@
 import type { DbConnection, DbMetadata } from "../types/db";
-import type { ApiErrorBody, QueryRequest, QueryResult } from "../types/query";
+import type {
+  ApiErrorBody,
+  NaturalQueryRequest,
+  NaturalQueryResult,
+  QueryRequest,
+  QueryResult,
+} from "../types/query";
 
 function apiRoot(): string {
   const fromEnv = import.meta.env.VITE_API_BASE_URL?.trim();
@@ -91,6 +97,30 @@ export async function getMetadata(name: string, refresh: boolean): Promise<DbMet
     await readError(res);
   }
   return (await res.json()) as DbMetadata;
+}
+
+export async function naturalQuery(
+  name: string,
+  body: NaturalQueryRequest,
+): Promise<NaturalQueryResult> {
+  const res = await fetch(`${apiV1()}/dbs/${encodeURIComponent(name)}/query/natural`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throwFromErrorText(res.status, text);
+  }
+  try {
+    return JSON.parse(text) as NaturalQueryResult;
+  } catch {
+    throw new ApiError(res.status, {
+      error: "invalid_response",
+      message: "响应不是合法 JSON",
+      detail: text.length > 400 ? `${text.slice(0, 400)}…` : text,
+    });
+  }
 }
 
 export async function runQuery(name: string, body: QueryRequest): Promise<QueryResult> {

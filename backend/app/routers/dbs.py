@@ -180,11 +180,30 @@ async def post_natural_query(name: str, body: NaturalQueryRequest) -> NaturalQue
             "metadata_not_found",
             "尚未加载该数据库的元数据，请先访问 GET /api/v1/dbs/{name} 获取元数据",
         ) from None
+    except llm_service.NaturalQueryUnusableError:
+        raise _http_error(
+            status.HTTP_400_BAD_REQUEST,
+            "natural_query_unusable",
+            "无法理解该查询描述，请尝试更具体的表述",
+        ) from None
+    except llm_service.LlmUnavailableError as e:
+        raise _http_error(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "llm_unavailable",
+            "AI 服务暂时不可用，请稍后重试或手动编写 SQL",
+            e.public_detail,
+        ) from e
     except RuntimeError as e:
-        if str(e) == "llm_unavailable":
-            raise _http_error(
-                status.HTTP_500_INTERNAL_SERVER_ERROR,
-                "llm_unavailable",
-                "AI 服务暂时不可用，请稍后重试或手动编写 SQL",
-            ) from e
-        raise
+        raise _http_error(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "natural_query_failed",
+            "自然语言生成失败",
+            str(e),
+        ) from e
+    except Exception as e:
+        raise _http_error(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "natural_query_failed",
+            "自然语言生成失败",
+            str(e),
+        ) from e

@@ -28,8 +28,18 @@ services:
     build: ./backend
     ports:
       - "8000:8000"
+    # OPENAI_*: inject via env_file (host backend/.env). Avoid bind-mounting ./backend/.env to /app/.env:
+    # if host once had a directory named .env, Docker would mount a directory and break Pydantic.
+    env_file:
+      - ./backend/.env
     environment:
       DB_QUERY_PATH: /root/.db_query
+    # Default 64MB shm can worsen thread/SSL issues under load; raise nofile for aiohttp TLS/OpenAI.
+    shm_size: 512mb
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     volumes:
       - db_query_data:/root/.db_query
 

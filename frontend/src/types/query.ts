@@ -18,6 +18,14 @@ export interface QueryResult {
   elapsedMs: number;
 }
 
+export interface NaturalQueryRequest {
+  prompt: string;
+}
+
+export interface NaturalQueryResult {
+  generatedSql: string;
+}
+
 /** 后端错误体（扁平 JSON，非 FastAPI 默认 detail 包裹） */
 export interface ApiErrorBody {
   error: string;

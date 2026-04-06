@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from app.storage.migrate import apply_sqlite_migrations
+
 _db_path: Path | None = None
 _lock = threading.Lock()
 
@@ -29,24 +31,7 @@ def init_db() -> None:
     conn = sqlite3.connect(path)
     try:
         conn.execute("PRAGMA foreign_keys = ON")
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS db_connections (
-                name TEXT PRIMARY KEY,
-                url TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS db_metadata (
-                connection_name TEXT PRIMARY KEY,
-                metadata_json TEXT NOT NULL,
-                cached_at TEXT NOT NULL,
-                FOREIGN KEY (connection_name) REFERENCES db_connections(name) ON DELETE CASCADE
-            );
-            """
-        )
-        conn.commit()
+        apply_sqlite_migrations(conn)
     finally:
         conn.close()
 

@@ -76,8 +76,3 @@ POST /api/v1/dbs/{name}/query/natural
 
 侧边栏可以放所有的数据库, 并且把添加数据库,删除已有数据库的功能放在侧边栏.
 侧边栏也要使用新的 token 风格. 然后主页直接显示第一个数据库的 metadata 信息和查询界面, 这样用户可以减少一次点击进入到 database display 页面.一个页面囊括所有功能.
-
-
-
-## db migration & unit test
-使用 db-up 来管理数据库迁移, 使用 pytest 来编写单元测试

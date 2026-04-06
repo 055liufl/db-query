@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useList } from "@refinedev/core";
 import { ConnectionSidebar } from "../components/ConnectionSidebar";
 import { MetadataPanel } from "../components/MetadataPanel";
+import { NaturalQuery } from "../components/NaturalQuery";
 import { ResultTable } from "../components/ResultTable";
 import { SqlEditor } from "../components/SqlEditor";
 import * as api from "../services/api";
@@ -108,7 +109,7 @@ export function WorkspacePage() {
               <MetadataPanel connectionName={decoded} onInsertSnippet={setSql} />
             </aside>
 
-            <main className="grid min-h-0 min-w-0 flex-1 grid-rows-[auto_auto_minmax(260px,38vh)_1fr] bg-[var(--color-bg)]">
+            <main className="grid min-h-0 min-w-0 flex-1 grid-rows-[auto_auto_auto_minmax(260px,38vh)_1fr] bg-[var(--color-bg)]">
               <div className="flex shrink-0 items-center justify-between gap-4 border-b-2 border-[var(--color-border)] px-4 py-3 md:px-8">
                 <div className="flex min-w-0 items-center gap-3 text-[var(--color-text)]">
                   <TableOutlined className="shrink-0 text-xl text-[var(--color-text-secondary)]" />
@@ -131,6 +132,15 @@ export function WorkspacePage() {
                   Query · {tabTime}
                 </span>
               </div>
+
+              <NaturalQuery
+                connectionName={decoded}
+                onSqlGenerated={(next) => {
+                  setSql(next);
+                  setResult(null);
+                  setError(null);
+                }}
+              />
 
               <div className="min-h-0 border-b-2 border-[var(--color-border)] bg-[var(--color-bg)] px-4 pb-6 pt-3 md:px-8 md:pb-7">
                 <div className="md-editor-frame">
