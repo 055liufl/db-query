@@ -6,9 +6,11 @@ from decimal import Decimal
 from typing import Any, cast
 
 import asyncpg
+import aiomysql
 from sqlglot import exp
 
 from app.models.query import QueryColumn, QueryResult
+from app.services.connection import _parse_mysql_url, detect_db_type
 from app.services.sql_select import parse_single_select_statement
 
 
@@ -53,11 +55,11 @@ def _limit_was_missing(stmt: exp.Expression) -> bool:
     return True
 
 
-def validate_and_prepare_sql(sql: str) -> tuple[str, bool]:
-    stmt = parse_single_select_statement(sql)
+def validate_and_prepare_sql(sql: str, *, dialect: str = "postgres") -> tuple[str, bool]:
+    stmt = parse_single_select_statement(sql, dialect=dialect)
     missing = _limit_was_missing(stmt)
     final_stmt = _apply_limit_if_missing(stmt, 1000) if missing else stmt
-    final_sql = final_stmt.sql(dialect="postgres")
+    final_sql = final_stmt.sql(dialect=dialect)
     return final_sql, missing
 
 
@@ -86,8 +88,8 @@ async def _typenames_for_oids(conn: asyncpg.Connection, oids: list[int]) -> dict
     return {int(r["oid"]): str(r["typname"]) for r in rows}
 
 
-async def execute_select(url: str, sql: str) -> QueryResult:
-    final_sql, limit_added = validate_and_prepare_sql(sql)
+async def _execute_select_postgres(url: str, sql: str) -> QueryResult:
+    final_sql, limit_added = validate_and_prepare_sql(sql, dialect="postgres")
     started = time.perf_counter()
     conn = await asyncpg.connect(dsn=url, timeout=30.0)
     try:
@@ -119,3 +121,83 @@ async def execute_select(url: str, sql: str) -> QueryResult:
         )
     finally:
         await conn.close()
+
+
+async def _execute_select_mysql(url: str, sql: str) -> QueryResult:
+    final_sql, limit_added = validate_and_prepare_sql(sql, dialect="mysql")
+    params = _parse_mysql_url(url)
+    started = time.perf_counter()
+    conn = await aiomysql.connect(**params, connect_timeout=30)
+    try:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(final_sql)
+            records = await cur.fetchall()
+            # Extract column metadata from cursor.description
+            columns: list[QueryColumn] = []
+            if cur.description:
+                for desc in cur.description:
+                    col_name = desc[0]
+                    # desc[1] is the type_code from MySQL; map to a readable name
+                    type_code = desc[1]
+                    type_name = _mysql_type_name(type_code)
+                    columns.append(QueryColumn(name=col_name, data_type=type_name))
+
+            rows_out: list[dict[str, Any]] = [_json_safe_row(r) for r in records]
+            elapsed_ms = int((time.perf_counter() - started) * 1000)
+            row_count = len(rows_out)
+            truncated = bool(limit_added and row_count >= 1000)
+            return QueryResult(
+                sql=final_sql,
+                columns=columns,
+                rows=rows_out,
+                row_count=row_count,
+                truncated=truncated,
+                elapsed_ms=elapsed_ms,
+            )
+    finally:
+        conn.close()
+
+
+# MySQL field type constants (from pymysql/constants/FIELD_TYPE.py)
+_MYSQL_TYPE_MAP: dict[int, str] = {
+    0: "decimal",
+    1: "tinyint",
+    2: "smallint",
+    3: "int",
+    4: "float",
+    5: "double",
+    6: "null",
+    7: "timestamp",
+    8: "bigint",
+    9: "mediumint",
+    10: "date",
+    11: "time",
+    12: "datetime",
+    13: "year",
+    14: "newdate",
+    15: "varchar",
+    16: "bit",
+    245: "json",
+    246: "newdecimal",
+    247: "enum",
+    248: "set",
+    249: "tinyblob",
+    250: "mediumblob",
+    251: "longblob",
+    252: "blob",
+    253: "varchar",
+    254: "char",
+    255: "geometry",
+}
+
+
+def _mysql_type_name(type_code: int) -> str:
+    return _MYSQL_TYPE_MAP.get(type_code, "unknown")
+
+
+async def execute_select(url: str, sql: str) -> QueryResult:
+    """Dispatch to the correct query executor based on URL scheme."""
+    db_type = detect_db_type(url)
+    if db_type == "postgres":
+        return await _execute_select_postgres(url, sql)
+    return await _execute_select_mysql(url, sql)

@@ -20,13 +20,13 @@ DbConnection  1 ──── *     QueryExecution
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
 | `name` | `str` | PRIMARY KEY，唯一，非空 | 用户自定义连接名称（URL slug 友好） |
-| `url` | `str` | 非空 | PostgreSQL 连接 URL，如 `postgres://user:pass@host:port/db` |
+| `url` | `str` | 非空 | 数据库连接 URL，如 `postgres://user:pass@host:5432/db` 或 `mysql://user:pass@host:3306/db` |
 | `created_at` | `datetime` | 非空，自动填充 | 创建时间（UTC ISO 8601） |
 | `updated_at` | `datetime` | 非空，自动更新 | 最后更新时间（UTC ISO 8601） |
 
 **校验规则**：
 - `name`：仅允许字母、数字、连字符、下划线；长度 1~64 字符
-- `url`：必须以 `postgres://` 或 `postgresql://` 开头
+- `url`：必须以 `postgres://`、`postgresql://` 或 `mysql://` 开头
 
 **Pydantic 模型**：
 ```python
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS db_connections (
 
 ### 2. DbMetadata（数据库元数据缓存）
 
-缓存从 PostgreSQL 抓取的表/视图结构信息，与连接一对一关联。
+缓存从 PostgreSQL 或 MySQL 抓取的表/视图结构信息，与连接一对一关联。
 
 | 字段 | 类型 | 约束 | 说明 |
 |------|------|------|------|
@@ -161,6 +161,12 @@ class ErrorResponse(AppBaseModel):
     "url": "postgres://user:pass@localhost:5432/mydb",
     "createdAt": "2026-03-29T00:00:00Z",
     "updatedAt": "2026-03-29T00:00:00Z"
+  },
+  {
+    "name": "my-mysql",
+    "url": "mysql://root@localhost:3306/todo_db",
+    "createdAt": "2026-04-15T00:00:00Z",
+    "updatedAt": "2026-04-15T00:00:00Z"
   }
 ]
 ```

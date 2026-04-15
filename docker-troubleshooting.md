@@ -102,6 +102,29 @@ docker exec <backend容器名> python -c "from app.core.config import get_settin
 
 ---
 
+## 6b. MySQL 与连接串
+
+后端同时支持 MySQL 连接（`mysql://` scheme），通过 `aiomysql` 驱动。
+
+**从容器内访问宿主机 MySQL**：
+
+`docker-compose.yml` 中 backend 服务已配置 `extra_hosts: host.docker.internal:host-gateway`，因此容器内可通过 `host.docker.internal` 访问宿主机。
+
+| 场景 | 连接串示例 |
+|------|-----------|
+| 容器内访问宿主机 MySQL | `mysql://root@host.docker.internal:3306/todo_db` |
+| 本机直连 | `mysql://root@127.0.0.1:3306/todo_db` |
+
+**常见问题**：
+
+| 问题 | 处理 |
+|------|------|
+| `Can't connect to MySQL server` | 检查宿主机 MySQL 的 `bind-address`，需设为 `0.0.0.0`（文件 `/etc/mysql/mysql.conf.d/mysqld.cnf`），改后 `sudo systemctl restart mysql` |
+| `Access denied for user` | MySQL root 默认只允许 localhost 登录；需 `CREATE USER 'root'@'%' IDENTIFIED BY ''; GRANT ALL ON todo_db.* TO 'root'@'%'; FLUSH PRIVILEGES;` |
+| URL 格式 | 必须以 `mysql://` 开头，格式：`mysql://user:password@host:port/database` |
+
+---
+
 ## 7. 浏览器与 API（含 Failed to fetch）
 
 - Toolbox：访问 **`http://<docker-machine-ip>:3000`** 与 **`:8000`**，勿把 **`localhost`** 当成 VM 上的服务地址。

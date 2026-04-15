@@ -5,10 +5,10 @@ from sqlglot import exp
 from sqlglot.errors import ParseError
 
 
-def parse_single_select_statement(sql: str) -> exp.Expression:
-    """Parse exactly one PostgreSQL SELECT (or WITH wrapping SELECT). Raises ValueError with API-facing messages."""
+def parse_single_select_statement(sql: str, *, dialect: str = "postgres") -> exp.Expression:
+    """Parse exactly one SELECT (or WITH wrapping SELECT). Raises ValueError with API-facing messages."""
     try:
-        statements = sqlglot.parse(sql, dialect="postgres")
+        statements = sqlglot.parse(sql, dialect=dialect)
     except ParseError as e:
         msg = f"SQL 语法错误：{e}"
         raise ValueError(msg) from e

@@ -12,6 +12,7 @@ from sqlglot import exp
 
 from app.core.config import Settings, get_settings
 from app.models.metadata import DbMetadataResponse
+from app.services.connection import detect_db_type
 from app.services.metadata import parse_cached_metadata
 from app.services.sql_select import parse_single_select_statement
 from app.storage import sqlite as sqlite_storage
@@ -246,10 +247,10 @@ def _extract_sql_candidates(text: str) -> list[str]:
     return out
 
 
-def _validate_llm_columns_against_metadata(sql: str, meta: DbMetadataResponse) -> None:
-    """Reject obvious hallucinated column names for a single-table SELECT (before hitting Postgres)."""
+def _validate_llm_columns_against_metadata(sql: str, meta: DbMetadataResponse, *, dialect: str = "postgres") -> None:
+    """Reject obvious hallucinated column names for a single-table SELECT."""
     try:
-        tree = parse_single_select_statement(sql)
+        tree = parse_single_select_statement(sql, dialect=dialect)
     except ValueError:
         return
     if isinstance(tree, exp.With):
@@ -260,15 +261,18 @@ def _validate_llm_columns_against_metadata(sql: str, meta: DbMetadataResponse) -
     if len(tables) != 1:
         return
     tbl = tables[0]
-    sch_raw = tbl.db if tbl.db is not None else "public"
+    has_explicit_schema = tbl.db is not None
+    sch_raw = tbl.db if has_explicit_schema else "public"
     sch_name = sch_raw.name if isinstance(sch_raw, exp.Identifier) else str(sch_raw)
     t_raw = tbl.name
     tname = t_raw.name if isinstance(t_raw, exp.Identifier) else str(t_raw)
     allowed: set[str] = set()
     for ti in meta.tables:
-        if ti.schema_name.casefold() == sch_name.casefold() and ti.table_name.casefold() == tname.casefold():
-            allowed = {c.name for c in ti.columns}
-            break
+        # Match by table name; if no explicit schema was given, match any schema
+        if ti.table_name.casefold() == tname.casefold():
+            if not has_explicit_schema or ti.schema_name.casefold() == sch_name.casefold():
+                allowed = {c.name for c in ti.columns}
+                break
     else:
         return
     allowed_l = {x.casefold() for x in allowed}
@@ -324,10 +328,10 @@ def _coerce_llm_reply_to_select(raw: str) -> str:
     )
 
 
-def _validate_generated_select(sql: str) -> None:
-    """确保为单条 PostgreSQL SELECT（与 execute 前校验一致，此处不追加 LIMIT）。"""
+def _validate_generated_select(sql: str, *, dialect: str = "postgres") -> None:
+    """确保为单条 SELECT（与 execute 前校验一致，此处不追加 LIMIT）。"""
     try:
-        parse_single_select_statement(sql)
+        parse_single_select_statement(sql, dialect=dialect)
     except ValueError as e:
         raise NaturalQueryUnusableError(detail=str(e)) from None
 
@@ -380,29 +384,42 @@ def _parse_chat_content(data: dict[str, Any]) -> str:
 async def generate_select_sql(connection_name: str, user_prompt: str) -> str:
     row = sqlite_storage.get_metadata_row(connection_name)
     if row is None:
-        msg = "metadata_not_found"
+        msg = “metadata_not_found”
         raise LookupError(msg)
 
-    meta = parse_cached_metadata(row["metadata_json"])
+    # Detect database type from stored connection URL
+    conn_row = sqlite_storage.get_connection(connection_name)
+    dialect = “postgres”
+    db_label = “PostgreSQL”
+    if conn_row is not None:
+        try:
+            db_type = detect_db_type(conn_row[“url”])
+            if db_type == “mysql”:
+                dialect = “mysql”
+                db_label = “MySQL”
+        except ValueError:
+            pass
+
+    meta = parse_cached_metadata(row[“metadata_json”])
     settings = get_settings()
     if not settings.openai_api_key:
         raise LlmUnavailableError(
-            "未配置 OPENAI_API_KEY。请在 backend/.env 中设置，保存后 docker-compose up -d --force-recreate backend。"
+            “未配置 OPENAI_API_KEY。请在 backend/.env 中设置，保存后 docker-compose up -d --force-recreate backend。”
         )
 
     meta_json = meta.model_dump_json(by_alias=True)
     system = (
-        "你是 PostgreSQL SQL 专家。下面 JSON 是数据库表结构（camelCase 字段名）。\n"
-        "规则：\n"
-        "1. 只输出一条完整 SELECT 语句，必须以 SELECT 或 WITH 开头；"
-        "不要只输出列清单加 FROM（例如必须先写 SELECT 列名... FROM ...）。"
-        "不要写英文/中文说明句（例如不要写 “select all users …” 这类话）；不要 Markdown、不要解释。\n"
-        "2. 使用标准 PostgreSQL 语法。\n"
-        "3. 列名与表名必须严格来自下方 Schema JSON 的 tables[].columns[].name 与 "
-        "schema_name/table_name；禁止臆造列名（例如未在 JSON 中出现则不得使用 username、"
-        "name 等“常见”字段名）。若用户未指定列名或你不确定应选哪些列，请使用 SELECT * "
-        "（或 WITH 内仅引用 JSON 中存在的对象）。\n"
-        f"\nSchema JSON:\n{meta_json}"
+        f”你是 {db_label} SQL 专家。下面 JSON 是数据库表结构（camelCase 字段名）。\n”
+        “规则：\n”
+        “1. 只输出一条完整 SELECT 语句，必须以 SELECT 或 WITH 开头；”
+        “不要只输出列清单加 FROM（例如必须先写 SELECT 列名... FROM ...）。”
+        “不要写英文/中文说明句（例如不要写 “select all users …” 这类话）；不要 Markdown、不要解释。\n”
+        f”2. 使用标准 {db_label} 语法。\n”
+        “3. 列名与表名必须严格来自下方 Schema JSON 的 tables[].columns[].name 与 “
+        “schema_name/table_name；禁止臆造列名（例如未在 JSON 中出现则不得使用 username、”
+        “name 等”常见”字段名）。若用户未指定列名或你不确定应选哪些列，请使用 SELECT * “
+        “（或 WITH 内仅引用 JSON 中存在的对象）。\n”
+        f”\nSchema JSON:\n{meta_json}”
     )
 
     session = await _get_aio_session(settings)
@@ -456,5 +473,5 @@ async def generate_select_sql(connection_name: str, user_prompt: str) -> str:
 
     raw = _parse_chat_content(data)
     sql = _coerce_llm_reply_to_select(raw)
-    _validate_llm_columns_against_metadata(sql, meta)
+    _validate_llm_columns_against_metadata(sql, meta, dialect=dialect)
     return sql

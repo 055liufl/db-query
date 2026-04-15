@@ -17,3 +17,13 @@ def test_parse_rejects_non_select() -> None:
 def test_parse_rejects_union() -> None:
     with pytest.raises(ValueError, match="UNION"):
         parse_single_select_statement("SELECT 1 UNION SELECT 2")
+
+
+def test_parse_mysql_dialect() -> None:
+    stmt = parse_single_select_statement("SELECT * FROM `todos`", dialect="mysql")
+    assert stmt is not None
+
+
+def test_parse_mysql_rejects_non_select() -> None:
+    with pytest.raises(ValueError, match="仅允许执行 SELECT"):
+        parse_single_select_statement("INSERT INTO t VALUES (1)", dialect="mysql")

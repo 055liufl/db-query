@@ -71,16 +71,24 @@ PUT /api/v1/dbs/{name}
 ```
 
 **描述**：添加新的数据库连接，或更新已有连接的 URL。`name` 作为唯一标识。
+支持 PostgreSQL（`postgres://` / `postgresql://`）和 MySQL（`mysql://`）连接。
 
 **路径参数**：
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | `name` | `string` | 连接名称，仅允许字母/数字/连字符/下划线，1~64 字符 |
 
-**请求体**：
+**请求体**（PostgreSQL 示例）：
 ```json
 {
   "url": "postgres://postgres:postgres@localhost:5432/postgres"
+}
+```
+
+**请求体**（MySQL 示例）：
+```json
+{
+  "url": "mysql://root@host.docker.internal:3306/todo_db"
 }
 ```
 
@@ -97,8 +105,8 @@ PUT /api/v1/dbs/{name}
 **错误 400**（URL 格式不合法）：
 ```json
 {
-  "error": "invalid_url",
-  "message": "连接 URL 格式不正确，必须以 postgres:// 或 postgresql:// 开头"
+  "error": "invalid_request",
+  "message": "连接 URL 格式不正确，必须以 postgres://、postgresql:// 或 mysql:// 开头"
 }
 ```
 
@@ -110,8 +118,9 @@ PUT /api/v1/dbs/{name}
 GET /api/v1/dbs/{name}
 ```
 
-**描述**：返回指定数据库的表和视图结构元数据。若缓存存在则直接返回，
-否则实时连接数据库抓取并缓存。
+**描述**：返回指定数据库的表和视图结构元数据。系统根据连接 URL 自动选择
+PostgreSQL 或 MySQL 元数据抓取方式。若缓存存在则直接返回，否则实时连接数据库
+抓取并缓存。
 
 **路径参数**：
 | 参数 | 类型 | 说明 |
@@ -161,6 +170,26 @@ GET /api/v1/dbs/{name}
 }
 ```
 
+**响应 200**（MySQL 示例，`schemaName` 为数据库名）：
+```json
+{
+  "connectionName": "my-mysql",
+  "tables": [
+    {
+      "schemaName": "todo_db",
+      "tableName": "todos",
+      "tableType": "BASE TABLE",
+      "columns": [
+        {"name": "id", "dataType": "int", "isNullable": false, "columnDefault": null},
+        {"name": "title", "dataType": "varchar", "isNullable": false, "columnDefault": null},
+        {"name": "completed", "dataType": "tinyint", "isNullable": true, "columnDefault": "0"}
+      ]
+    }
+  ],
+  "cachedAt": "2026-04-15T00:00:00Z"
+}
+```
+
 **错误 404**（连接不存在）：
 ```json
 {
@@ -186,8 +215,8 @@ GET /api/v1/dbs/{name}
 POST /api/v1/dbs/{name}/query
 ```
 
-**描述**：对指定数据库执行 SQL 查询。仅允许 SELECT 语句；若无 LIMIT 子句，
-自动追加 `LIMIT 1000`。
+**描述**：对指定数据库执行 SQL 查询。系统根据连接 URL 自动选择 PostgreSQL 或
+MySQL 驱动和 SQL 方言。仅允许 SELECT 语句；若无 LIMIT 子句，自动追加 `LIMIT 1000`。
 
 **路径参数**：
 | 参数 | 类型 | 说明 |
@@ -253,6 +282,7 @@ POST /api/v1/dbs/{name}/query/natural
 ```
 
 **描述**：将自然语言描述发送给 LLM，结合数据库元数据生成 SQL 查询语句。
+系统根据连接的数据库类型自动切换 LLM 提示词（PostgreSQL 语法或 MySQL 语法）。
 返回生成的 SQL，不自动执行。
 
 **路径参数**：

@@ -52,7 +52,7 @@ export function DatabaseForm({ onSuccess }: DatabaseFormProps) {
         ]}
       >
         <Input
-          placeholder="例如 my-postgres"
+          placeholder="例如 my-postgres 或 my-mysql"
           data-testid="db-form-name"
           size="large"
           autoComplete="off"
@@ -60,7 +60,7 @@ export function DatabaseForm({ onSuccess }: DatabaseFormProps) {
       </Form.Item>
       <Form.Item label="数据库 URL" name="url" rules={[{ required: true, message: "请输入连接 URL" }]}>
         <Input
-          placeholder="Docker Desktop: 127.0.0.1；Toolbox: docker-machine ip；容器内后端请用 postgres 主机名"
+          placeholder="postgres://user:pass@host:5432/db 或 mysql://user:pass@host:3306/db"
           data-testid="db-form-url"
           size="large"
           autoComplete="off"

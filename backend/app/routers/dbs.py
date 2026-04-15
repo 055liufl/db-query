@@ -46,11 +46,19 @@ async def list_dbs() -> list[DbConnectionResponse]:
 async def put_db(name: str, body: DbConnectionPutRequest, response: Response) -> DbConnectionResponse:
     try:
         connection_service.validate_connection_name(name)
-        connection_service.validate_postgres_url(body.url)
-        await connection_service.test_postgres_connection(body.url)
+        connection_service.validate_db_url(body.url)
+        await connection_service.test_connection(body.url)
     except ValueError as e:
         raise _http_error(status.HTTP_400_BAD_REQUEST, "invalid_request", str(e)) from e
-    except (OSError, asyncpg.PostgresError) as e:
+    except (OSError, asyncpg.PostgresError, Exception) as e:
+        if isinstance(e, (OSError, asyncpg.PostgresError)):
+            raise _http_error(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                "connection_failed",
+                "无法连接到数据库，请检查连接 URL 是否正确",
+                str(e),
+            ) from e
+        # aiomysql errors
         raise _http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "connection_failed",
@@ -114,8 +122,15 @@ async def get_db_metadata(
             return metadata_service.parse_cached_metadata(cached["metadata_json"])
 
     try:
-        meta = await metadata_service.fetch_metadata_from_postgres(url)
+        meta = await metadata_service.fetch_metadata(url)
     except (OSError, asyncpg.PostgresError) as e:
+        raise _http_error(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            "connection_failed",
+            "无法连接到数据库以获取元数据",
+            str(e),
+        ) from e
+    except Exception as e:
         raise _http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "connection_failed",

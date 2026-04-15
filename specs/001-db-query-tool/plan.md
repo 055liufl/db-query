@@ -6,24 +6,25 @@
 ## 摘要
 
 构建一个面向内部开发/分析人员的数据库查询 Web 工具。用户通过添加 PostgreSQL
-连接 URL，系统自动抓取并缓存数据库的表/视图元数据，支持直接编写 SQL 查询（仅
-SELECT，自动补充 LIMIT 1000）以及通过自然语言借助 LLM 生成 SQL。后端采用
-FastAPI + sqlglot + openai SDK，前端采用 React + Refine 5 + Monaco Editor，
-通过 Docker Toolbox 在 Win10 环境下运行。
+或 MySQL 连接 URL，系统自动识别数据库类型并抓取、缓存表/视图元数据，支持直接
+编写 SQL 查询（仅 SELECT，自动补充 LIMIT 1000）以及通过自然语言借助 LLM 生成
+SQL（自动匹配目标数据库方言）。后端采用 FastAPI + asyncpg/aiomysql + sqlglot +
+aiohttp，前端采用 React + Refine 5 + Monaco Editor，通过 Docker 在 Ubuntu 20.04
+环境下运行（亦兼容 Win10 + Docker Toolbox）。
 
 ## 技术上下文
 
 **语言/版本**：Python 3.12+（后端，通过 `uv` 管理）；TypeScript 5.x（前端）
 **主要依赖**：
-- 后端：FastAPI、sqlglot、openai SDK、SQLAlchemy（异步，连接 PostgreSQL）、aiosqlite（SQLite 存储）
+- 后端：FastAPI、asyncpg（PostgreSQL）、aiomysql（MySQL）、sqlglot（多方言 SQL 解析）、aiohttp（OpenAI 兼容 HTTP）、Pydantic v2
 - 前端：React 18、Refine 5、Tailwind CSS、Ant Design 5、Monaco Editor
 
 **存储**：
 - SQLite（`~/.db_query/db_query.db`）：存储数据库连接信息与元数据缓存
-- 目标数据库：PostgreSQL（只读查询，不写入）
+- 目标数据库：PostgreSQL 或 MySQL（只读查询，不写入；URL scheme 自动识别）
 
 **测试**：pytest + httpx（后端）；无前端测试要求（内部工具）
-**目标平台**：Win10 + Docker Toolbox（前后端均容器化）
+**目标平台**：Ubuntu 20.04 + Docker（亦兼容 Win10 + Docker Toolbox）；前后端均容器化
 **项目类型**：Web 应用（后端 REST API + 前端 SPA）
 **性能目标**：
 - 连接 + 元数据加载 ≤ 30 秒（首次）；缓存复用时 ≤ 1 秒
@@ -82,10 +83,11 @@ backend/
     │   ├── metadata.py      # 表/视图元数据 Pydantic 模型
     │   └── query.py         # 查询请求/响应 Pydantic 模型
     ├── services/
-    │   ├── connection.py    # 数据库连接管理
-    │   ├── metadata.py      # 元数据抓取与缓存
-    │   ├── query.py         # SQL 校验与执行
-    │   └── llm.py           # OpenAI SDK 集成，自然语言→SQL
+    │   ├── connection.py    # 数据库连接管理（PostgreSQL + MySQL URL 检测与连通性测试）
+    │   ├── metadata.py      # 元数据抓取与缓存（按 URL scheme 分派 asyncpg / aiomysql）
+    │   ├── query.py         # SQL 校验与执行（多方言 sqlglot + 对应驱动）
+    │   ├── sql_select.py    # 单条 SELECT 解析（支持 postgres / mysql 方言）
+    │   └── llm.py           # aiohttp 集成 OpenAI 兼容接口，自然语言→SQL（自动切换 PG/MySQL 提示词）
     ├── routers/
     │   └── dbs.py           # /api/v1/dbs 路由
     └── storage/

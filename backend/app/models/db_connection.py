@@ -6,7 +6,7 @@ from app.models import AppBaseModel
 
 
 class DbConnectionPutRequest(AppBaseModel):
-    url: str = Field(..., description="PostgreSQL connection URL")
+    url: str = Field(..., description="PostgreSQL or MySQL connection URL")
 
 
 class DbConnectionResponse(AppBaseModel):

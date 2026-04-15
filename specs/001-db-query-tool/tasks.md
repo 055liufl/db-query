@@ -120,6 +120,37 @@ description: "数据库查询工具任务清单"
 
 ---
 
+## Phase 5：MySQL 支持（多数据库扩展）
+
+**目标**：在已有 PostgreSQL 支持基础上，新增 MySQL 连接、元数据提取、查询执行和自然语言 SQL 生成支持。系统根据连接 URL scheme 自动识别数据库类型。
+
+**前置**：Phase 1–4 完成
+
+### 后端 MySQL 支持
+
+- [x] T035 [P] 在 `pyproject.toml` 中添加 `aiomysql>=0.2.0` 依赖
+- [x] T036 [P] 扩展 `connection.py`：新增 `detect_db_type()`、`validate_db_url()`、`_parse_mysql_url()`、`test_mysql_connection()`、`test_connection()` 统一分派
+- [x] T037 更新 `sql_select.py`：`parse_single_select_statement()` 接受 `dialect` 参数，支持 `"postgres"` 和 `"mysql"`
+- [x] T038 扩展 `metadata.py`：新增 `fetch_metadata_from_mysql()`（查询 MySQL `information_schema`，过滤系统 schema）；新增 `fetch_metadata()` 统一分派
+- [x] T039 扩展 `query.py`：新增 `_execute_select_mysql()`（aiomysql + DictCursor + MySQL 类型映射）；`validate_and_prepare_sql()` 接受 `dialect` 参数；`execute_select()` 统一分派
+- [x] T040 更新 `llm.py`：`generate_select_sql()` 根据连接 URL 检测数据库类型，system prompt 动态切换 PostgreSQL/MySQL 专家角色和语法要求；列校验 `_validate_llm_columns_against_metadata()` 支持无显式 schema 匹配（MySQL 默认 schema 为数据库名）
+- [x] T041 更新 `routers/dbs.py`：`put_db` 使用 `validate_db_url()` + `test_connection()` 统一入口；`get_db_metadata` 使用 `fetch_metadata()` 分派；异常处理兼容 aiomysql 错误
+
+### 前端与配置
+
+- [x] T042 [P] 更新 `DatabaseForm.tsx` placeholder 提示支持 MySQL URL 格式
+- [x] T043 [P] 更新 `docker-compose.yml`：backend 服务增加 `extra_hosts: host.docker.internal:host-gateway`，使容器内可访问宿主机 MySQL
+
+### 测试
+
+- [x] T044 [P] 更新 `tests/test_connection.py`：新增 MySQL URL 检测、解析、校验用例
+- [x] T045 [P] 更新 `tests/test_sql_select.py`：新增 MySQL 方言解析用例
+- [x] T046 [P] 新增 `tests/test_integration_mysql.py`：MySQL 连接、元数据、查询集成测试（需设置 `MYSQL_INTEGRATION_URL`）
+
+**Phase 5 检查点**：使用 `mysql://root@host.docker.internal:3306/todo_db` 添加连接 → 浏览元数据 → 执行 `SELECT * FROM todos` → 自然语言生成 MySQL SQL，全链路验证通过。
+
+---
+
 ## 依赖与执行顺序
 
 ```
@@ -134,6 +165,9 @@ Phase 3（US3）— 依赖 Phase 1 + Phase 2 完成
 
 Phase 4（迁移/测试）— 依赖 Phase 1–3
   T031 ‖ T032 ‖ T033 ‖ T034
+
+Phase 5（MySQL 支持）— 依赖 Phase 1–4
+  T035-T037（依赖+解析层）→ T038-T041（业务服务）‖ T042-T043（前端+配置）→ T044-T046（测试）
 ```
 
 ### 并行机会
@@ -143,3 +177,4 @@ Phase 4（迁移/测试）— 依赖 Phase 1–3
 - Phase 2 中：T015、T016 可与 T017 并行；T018-T022 均可并行
 - Phase 3 中：T025-T027（后端）与 T028-T029（前端）可并行
 - Phase 4 中：T031–T034 均可并行
+- Phase 5 中：T035-T037 可并行；T038-T041 与 T042-T043 可并行；T044-T046 可并行

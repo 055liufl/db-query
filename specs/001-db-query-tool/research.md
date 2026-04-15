@@ -31,31 +31,65 @@ async def execute_query(url: str, sql: str) -> list[dict]:
 
 ---
 
+## 1b. aiomysql 异步连接 MySQL
+
+**决策**：使用 `aiomysql` 异步连接 MySQL，与 asyncpg 并列作为第二数据库驱动。
+系统根据连接 URL scheme（`postgres://` vs `mysql://`）自动选择驱动。
+
+**理由**：
+- `aiomysql` 基于 PyMySQL，纯 Python 实现，无需编译 C 扩展，Docker 镜像无额外系统依赖
+- 原生 asyncio 支持，与 FastAPI 异步架构一致
+- DictCursor 可直接返回字典列表，便于序列化为 JSON
+- MySQL URL 通过 `urllib.parse.urlparse` 解析为 host/port/user/password/db 参数
+
+**替代方案评估**：
+- asyncmy：性能更高（Cython），但需要编译环境，Docker slim 镜像不友好
+- SQLAlchemy async + aiomysql：引入不必要的 ORM 抽象
+- mysql-connector-python：官方驱动但无原生 asyncio 支持
+
+**实现要点**：
+```python
+import aiomysql
+
+async def execute_query(url: str, sql: str) -> list[dict]:
+    params = _parse_mysql_url(url)  # urlparse -> host/port/user/password/db
+    conn = await aiomysql.connect(**params)
+    try:
+        async with conn.cursor(aiomysql.DictCursor) as cur:
+            await cur.execute(sql)
+            return await cur.fetchall()
+    finally:
+        conn.close()
+```
+
+---
+
 ## 2. sqlglot SQL 解析与安全校验
 
 **决策**：使用 `sqlglot` 解析 SQL，验证仅包含 SELECT 语句，并自动注入 LIMIT。
+解析和生成时根据连接的数据库类型选择对应方言（`dialect="postgres"` 或 `dialect="mysql"`）。
 
 **理由**：
-- sqlglot 支持多种数据库方言（默认 ANSI，可指定 `dialect="postgres"`）
+- sqlglot 支持多种数据库方言（默认 ANSI，可指定 `dialect="postgres"` 或 `dialect="mysql"`）
 - 提供完整的 AST 解析，可精准检测语句类型
 - 纯 Python 实现，无系统级依赖
+- MySQL 方言正确处理反引号（`` ` ``）标识符
 
 **实现要点**：
 ```python
 import sqlglot
 from sqlglot import exp
 
-def validate_and_limit(sql: str) -> str:
-    statements = sqlglot.parse(sql, dialect="postgres")
+def validate_and_limit(sql: str, dialect: str = "postgres") -> str:
+    statements = sqlglot.parse(sql, dialect=dialect)
     if len(statements) != 1:
         raise ValueError("仅允许提交单条 SQL 语句")
     stmt = statements[0]
     if not isinstance(stmt, exp.Select):
         raise ValueError("仅允许执行 SELECT 查询")
-    # 自动注入 LIMIT
     if stmt.args.get("limit") is None:
         stmt = stmt.limit(1000)
-    return stmt.sql(dialect="postgres")
+    return stmt.sql(dialect=dialect)
 ```
 
 **替代方案评估**：
@@ -65,10 +99,11 @@ def validate_and_limit(sql: str) -> str:
 
 ---
 
-## 3. PostgreSQL 元数据查询方案
+## 3. 数据库元数据查询方案
 
-**决策**：通过 PostgreSQL 系统表（`information_schema` + `pg_catalog`）查询
-表和视图结构，结果经 LLM 格式化后以 JSON 缓存到 SQLite。
+**决策**：通过 `information_schema`（SQL 标准）查询表和视图结构，结果以 JSON
+缓存到 SQLite。PostgreSQL 过滤 `pg_catalog` 和 `information_schema` 系统 schema；
+MySQL 过滤 `information_schema`、`mysql`、`performance_schema`、`sys` 系统 schema。
 
 **核心查询**：
 ```sql
@@ -92,8 +127,9 @@ WHERE table_schema = $1 AND table_name = $2
 ORDER BY ordinal_position;
 ```
 
-**理由**：`information_schema` 是 SQL 标准，跨 PostgreSQL 版本兼容性好；
-不依赖 pg_catalog 私有表，升级安全。
+**理由**：`information_schema` 是 SQL 标准，PostgreSQL 和 MySQL 均支持，跨版本
+兼容性好。PostgreSQL 不依赖 pg_catalog 私有表，升级安全；MySQL 的 `information_schema`
+同样提供完整的表和列元数据。
 
 **元数据 JSON 结构**（缓存到 SQLite）：
 ```json
@@ -146,16 +182,16 @@ CREATE TABLE IF NOT EXISTS db_metadata (
 **决策**：使用 `openai` Python SDK（v1.x），调用 `gpt-4o-mini`（可配置），
 将数据库元数据作为系统 prompt 上下文，用户自然语言作为用户消息。
 
-**Prompt 设计策略**：
+**Prompt 设计策略**（根据数据库类型动态切换）：
 ```
 System:
-你是一个 SQL 专家。以下是数据库的表结构信息：
+你是 {PostgreSQL|MySQL} SQL 专家。以下是数据库的表结构信息：
 {metadata_json}
 
 规则：
 1. 只生成 SELECT 查询
 2. 不要添加解释文字，只输出 SQL
-3. 使用 PostgreSQL 语法
+3. 使用标准 {PostgreSQL|MySQL} 语法
 
 User:
 {用户自然语言描述}

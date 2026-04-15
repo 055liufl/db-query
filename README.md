@@ -1,8 +1,8 @@
 # DB Query
 
-面向 **PostgreSQL** 的只读 Web 查询工具：在浏览器中管理连接、浏览 Schema、编写 **SQL** 或通过 **自然语言** 生成 SQL，并以表格展示结果。连接信息与元数据缓存在本地 **SQLite**；执行查询时直连目标 Postgres（只读）。
+面向 **PostgreSQL** 与 **MySQL** 的只读 Web 查询工具：在浏览器中管理连接、浏览 Schema、编写 **SQL** 或通过 **自然语言** 生成 SQL，并以表格展示结果。连接信息与元数据缓存在本地 **SQLite**；执行查询时直连目标数据库（只读）。
 
-典型部署环境：**Windows 10 + Docker Toolbox**（Docker Machine 虚拟机 IP，如 `192.168.99.100`）。
+典型部署环境：**Ubuntu 20.04 + Docker**；亦兼容 Windows 10 + Docker Toolbox。
 
 ---
 
@@ -10,7 +10,7 @@
 
 | 能力 | 说明 |
 |------|------|
-| 连接管理 | 添加 / 编辑 / 删除已保存的 PostgreSQL 连接（DSN 存 SQLite） |
+| 连接管理 | 添加 / 编辑 / 删除已保存的 PostgreSQL 或 MySQL 连接（DSN 存 SQLite） |
 | Schema 浏览 | 拉取并缓存表、视图及列信息；支持刷新元数据 |
 | SQL 执行 | Monaco 编辑器；仅允许 **SELECT**（含 **WITH**）；无 `LIMIT` 时自动追加 `LIMIT 1000` |
 | 自然语言 SQL | 使用 OpenAI 兼容接口，根据 Schema 生成查询；服务端校验列名与语法 |
@@ -22,7 +22,7 @@
 
 | 层级 | 技术 |
 |------|------|
-| 后端 | Python 3.12+、[uv](https://github.com/astral-sh/uv)、FastAPI、asyncpg、sqlglot、aiohttp（OpenAI 兼容 HTTP）、Pydantic v2 |
+| 后端 | Python 3.12+、[uv](https://github.com/astral-sh/uv)、FastAPI、asyncpg、aiomysql、sqlglot、aiohttp（OpenAI 兼容 HTTP）、Pydantic v2 |
 | 前端 | TypeScript、React 18、Vite、Refine 5、Ant Design 5、Tailwind CSS、Monaco Editor |
 | 本地存储 | SQLite（`~/.db_query/db_query.db`，容器内为 `/root/.db_query`） |
 | 容器 | docker-compose 3.3（兼容旧版 Docker Toolbox）、PostgreSQL 16（可选示例库） |
@@ -78,7 +78,12 @@ db-query/
 
 4. **首次使用**
 
-   在左侧「添加连接」保存 PostgreSQL URL（可与 compose 中的 `postgres` 服务同网段，例如 `postgresql://postgres:postgres@postgres:5432/postgres` 从容器内访问；从宿主机浏览器访问时，请按实际主机名与端口填写）。
+   在左侧「添加连接」保存数据库 URL：
+
+   - **PostgreSQL**：`postgresql://postgres:postgres@postgres:5432/postgres`（容器内访问 compose 的 postgres 服务）
+   - **MySQL**：`mysql://root@host.docker.internal:3306/todo_db`（容器内访问宿主机 MySQL，`host.docker.internal` 由 compose 自动映射）
+
+   从宿主机浏览器访问时，请按实际主机名与端口填写。
 
 ---
 
@@ -105,7 +110,8 @@ npm run dev
 | 类型 | 命令 |
 |------|------|
 | 后端 | `cd backend && uv run ruff check app tests && uv run mypy && uv run pytest` |
-| 集成测试 | 设置 `POSTGRES_INTEGRATION_URL` 后运行 pytest（见 `tests/test_integration_postgres.py`） |
+| 集成测试（PG） | 设置 `POSTGRES_INTEGRATION_URL` 后运行 pytest（见 `tests/test_integration_postgres.py`） |
+| 集成测试（MySQL） | 设置 `MYSQL_INTEGRATION_URL` 后运行 pytest（见 `tests/test_integration_mysql.py`） |
 | 前端 | `cd frontend && npm test`（Vitest） |
 
 GitHub Actions（`.github/workflows/ci.yml`）：后端 Ruff + Mypy + Pytest（带 Postgres 服务），前端 `npm install && npm test`。
@@ -145,7 +151,7 @@ JSON 响应字段使用 **camelCase**。
 
 ## SQL 安全策略
 
-- 使用 **sqlglot**（`dialect="postgres"`）解析，仅允许单条 **SELECT** / **WITH … SELECT**。
+- 使用 **sqlglot** 解析（根据连接 URL 自动选择 `dialect="postgres"` 或 `dialect="mysql"`），仅允许单条 **SELECT** / **WITH … SELECT**。
 - 禁止 DML/DDL；未带 `LIMIT` 时自动追加 `LIMIT 1000`（自然语言生成路径在校验阶段不追加，执行时与手写 SQL 一致）。
 
 ---
