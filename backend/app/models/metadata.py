@@ -7,7 +7,7 @@ from app.models import AppBaseModel
 
 class ColumnInfo(AppBaseModel):
     name: str
-    data_type: str = Field(..., description="PostgreSQL data type name")
+    data_type: str = Field(..., description="Database column data type name (PostgreSQL or MySQL)")
     is_nullable: bool
     column_default: str | None = None
 

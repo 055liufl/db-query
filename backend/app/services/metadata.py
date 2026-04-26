@@ -91,9 +91,11 @@ async def fetch_metadata_from_mysql(url: str, *, timeout_s: float = 30.0) -> DbM
 
             tables: list[TableInfo] = []
             for tr in table_rows:
-                schema = tr["TABLE_SCHEMA"] if "TABLE_SCHEMA" in tr else tr["table_schema"]
-                tname = tr["TABLE_NAME"] if "TABLE_NAME" in tr else tr["table_name"]
-                ttype = tr["TABLE_TYPE"] if "TABLE_TYPE" in tr else tr["table_type"]
+                # aiomysql DictCursor returns lowercase keys for information_schema queries
+                tr_lower = {k.lower(): v for k, v in tr.items()}
+                schema = tr_lower["table_schema"]
+                tname = tr_lower["table_name"]
+                ttype = tr_lower["table_type"]
 
                 await cur.execute(
                     "SELECT column_name, data_type, is_nullable, column_default "
@@ -104,15 +106,15 @@ async def fetch_metadata_from_mysql(url: str, *, timeout_s: float = 30.0) -> DbM
                 )
                 col_rows = await cur.fetchall()
 
-                columns = [
-                    ColumnInfo(
-                        name=c.get("COLUMN_NAME") or c.get("column_name", ""),
-                        data_type=c.get("DATA_TYPE") or c.get("data_type", ""),
-                        is_nullable=(c.get("IS_NULLABLE") or c.get("is_nullable", "NO")) == "YES",
-                        column_default=c.get("COLUMN_DEFAULT") or c.get("column_default"),
-                    )
-                    for c in col_rows
-                ]
+                columns = []
+                for c in col_rows:
+                    cl = {k.lower(): v for k, v in c.items()}
+                    columns.append(ColumnInfo(
+                        name=cl.get("column_name", ""),
+                        data_type=cl.get("data_type", ""),
+                        is_nullable=cl.get("is_nullable", "NO") == "YES",
+                        column_default=cl.get("column_default"),
+                    ))
                 tables.append(
                     TableInfo(
                         schema_name=schema,
@@ -124,7 +126,7 @@ async def fetch_metadata_from_mysql(url: str, *, timeout_s: float = 30.0) -> DbM
         cached_at = datetime.now(UTC)
         return DbMetadataResponse(connection_name="", tables=tables, cached_at=cached_at)
     finally:
-        conn.close()
+        conn.ensure_closed()
 
 
 async def fetch_metadata(url: str, *, timeout_s: float = 30.0) -> DbMetadataResponse:

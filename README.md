@@ -35,7 +35,11 @@
 db-query/
 ├── backend/                 # FastAPI 应用（app/）
 ├── frontend/                # React + Vite
-├── docker-compose.yml       # postgres + backend + frontend
+├── fixtures/
+│   ├── interview_db_seed.sql  # MySQL 示例库 interview_db（DDL + seed data）
+│   ├── seed.sql               # PostgreSQL 示例库（users 表）
+│   └── test.rest              # REST Client 测试用例（PostgreSQL + MySQL）
+├── docker-compose.yml       # postgres + mysql + backend + frontend
 ├── docker-compose.test.yml  # 可选：容器内 pytest / Vitest（见下文）
 ├── docker-troubleshooting.md
 ├── specs/                   # 需求与说明（非运行时代码）
@@ -55,15 +59,12 @@ db-query/
 
 1. **准备后端环境变量**
 
-   复制 `backend/.env.example` 为 `backend/.env`，按需填写：
+   ```bash
+   cp backend/.env.example backend/.env
+   # 编辑 backend/.env，填写 OPENAI_API_KEY（自然语言 SQL 需要；不填则仅手写 SQL）
+   ```
 
-   | 变量 | 说明 |
-   |------|------|
-   | `OPENAI_API_KEY` | 自然语言生成 SQL 所需；不填则仅支持手写 SQL |
-   | `OPENAI_BASE_URL` | 可选，默认 `https://api.openai.com/v1` |
-   | `OPENAI_MODEL` | 可选，默认 `gpt-4o-mini` |
-
-   > **不要在 compose 里把 `backend/.env` 以文件挂载为容器内 `.env`**：若宿主曾误建名为 `.env` 的目录，会挂载成目录导致崩溃。当前 compose 使用 `env_file` 注入即可。
+   变量详细说明见 [`docker-troubleshooting.md` §5](./docker-troubleshooting.md)。
 
 2. **构建并启动**
 
@@ -80,10 +81,33 @@ db-query/
 
    在左侧「添加连接」保存数据库 URL：
 
-   - **PostgreSQL**：`postgresql://postgres:postgres@postgres:5432/postgres`（容器内访问 compose 的 postgres 服务）
-   - **MySQL**：`mysql://root@host.docker.internal:3306/todo_db`（容器内访问宿主机 MySQL，`host.docker.internal` 由 compose 自动映射）
+   | 数据库 | 连接 URL（Docker Compose 内部） |
+   |--------|-------------------------------|
+   | PostgreSQL | `postgres://postgres:postgres@postgres:5432/postgres` |
+   | MySQL (interview_db) | `mysql://root:root@mysql:3306/interview_db` |
 
-   从宿主机浏览器访问时，请按实际主机名与端口填写。
+   > MySQL 连接常见问题见 [`docker-troubleshooting.md` §15](./docker-troubleshooting.md)。
+
+5. **MySQL 示例数据库（interview_db）**
+
+   Compose 已包含 MySQL 8.0 服务，首次启动时自动导入 `fixtures/interview_db_seed.sql`，创建 `interview_db` 数据库（招聘面试管理系统，8 张表、144 条 seed 数据）。
+
+   在前端添加连接时使用：
+   ```
+   mysql://root:root@mysql:3306/interview_db
+   ```
+
+   若需手动导入（宿主机已安装 MySQL client）：
+   ```bash
+   mysql -u root -p -h 127.0.0.1 -P 3306 < fixtures/interview_db_seed.sql
+   ```
+
+   或在已运行的 Docker 容器内执行：
+   ```bash
+   docker exec -i db-query-mysql-1 mysql -uroot -proot < fixtures/interview_db_seed.sql
+   ```
+
+   > `interview_db` 包含：departments、interviewers、job_positions、candidates、applications、interview_schedule、interview_feedback、offers。
 
 ---
 
@@ -162,13 +186,14 @@ Compose **3.3**、构建与运行、网络与 API、LLM、VirtualBox 资源、Co
 
 ---
 
-## 常见问题（摘要）
+## 常见问题
 
-更细步骤与命令仍以 **`docker-troubleshooting.md`** 为准。
+详见 **[`docker-troubleshooting.md`](./docker-troubleshooting.md)**（单一事实来源）：
 
-- **前端能打开但 API 失败**：勿混用 VM IP 与 `localhost`；见排障文档 **§7**。
-- **自然语言报错**：`OPENAI_API_KEY` / `OPENAI_BASE_URL`；见 **§5、§10**。
-- **列名不存在**：刷新元数据或 `SELECT *`；见 **§10.4**。
+- 前端能打开但 API 失败 → **§7**
+- 自然语言报错（API key / Base URL） → **§5、§10、§15.2**
+- MySQL 连接 Access denied → **§15.1**
+- 列名不存在 → **§10.4**
 
 ---
 

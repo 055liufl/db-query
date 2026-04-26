@@ -1,82 +1,25 @@
 # 快速启动：数据库查询工具
 
-**分支**：`001-db-query-tool` | **日期**：2026-03-29
-**运行环境**：Win10 + Docker Toolbox
+**日期**：2026-03-29
+**运行环境**：Ubuntu 20.04 + Docker（亦兼容 Win10 + Docker Toolbox）
+
+> 完整的启动步骤、环境变量配置、排障指南见仓库根目录 **[`README.md`](../../README.md)** 和 **[`docker-troubleshooting.md`](../../docker-troubleshooting.md)**。
 
 ---
 
-## 前置条件
-
-- Docker Toolbox 已安装并启动（`docker-machine start default`）
-- 获取 Docker Toolbox 默认 IP（通常为 `192.168.99.100`）：
-  ```bash
-  docker-machine ip default
-  ```
-- 准备好 OpenAI API Key
-
----
-
-## 目录结构
-
-```
-db-query/
-├── backend/
-│   ├── pyproject.toml
-│   ├── Dockerfile
-│   ├── .env.example
-│   └── app/
-├── frontend/
-│   ├── package.json
-│   ├── Dockerfile
-│   └── src/
-└── docker-compose.yml
-```
-
----
-
-## 启动步骤
-
-### 1. 配置环境变量
+## 三步启动
 
 ```bash
-# 复制后端环境变量模板
+# 1. 准备环境变量
 cp backend/.env.example backend/.env
+# 编辑 backend/.env，填写 OPENAI_API_KEY（可选，仅自然语言 SQL 需要）
 
-# 编辑 backend/.env，填写以下内容：
-# OPENAI_API_KEY=sk-xxxxxx
-# DB_QUERY_PATH=/root/.db_query
-```
-
-### 2. 配置前端 API 地址
-
-```bash
-# 编辑 frontend/.env（首次需创建）：
-# VITE_API_BASE_URL=http://192.168.99.100:8000
-```
-
-### 3. 启动所有服务
-
-```bash
-# 在项目根目录执行
+# 2. 启动所有服务（postgres + mysql + backend + frontend）
 docker-compose up --build
-```
 
-启动完成后：
-- 后端 API：`http://192.168.99.100:8000`
-- 前端界面：`http://192.168.99.100:3000`
-- API 文档（Swagger）：`http://192.168.99.100:8000/docs`
-
----
-
-## 验证启动成功
-
-```bash
-# 检查后端健康状态
-curl http://192.168.99.100:8000/api/v1/dbs
-# 预期返回：[]
-
-# 检查前端
-# 浏览器打开 http://192.168.99.100:3000，应显示数据库连接列表页
+# 3. 访问
+# 前端：http://<主机IP>:3000
+# API / Swagger：http://<主机IP>:8000/docs
 ```
 
 ---
@@ -85,76 +28,28 @@ curl http://192.168.99.100:8000/api/v1/dbs
 
 ### Step 1：添加数据库连接
 
-```bash
-curl -X PUT http://192.168.99.100:8000/api/v1/dbs/my-db \
-  -H "Content-Type: application/json" \
-  -d '{"url": "postgres://postgres:postgres@192.168.99.1:5432/mydb"}'
-```
+在前端左侧点击「添加连接」，填写：
 
-> **注意**：在 Docker Toolbox 中，宿主机 IP 通常为 `192.168.99.1`，
-> 而非 `localhost`。
+| 数据库 | 连接 URL（Docker Compose 内部） |
+|--------|-------------------------------|
+| PostgreSQL | `postgres://postgres:postgres@postgres:5432/postgres` |
+| MySQL (interview_db) | `mysql://root:root@mysql:3306/interview_db` |
 
-### Step 2：加载元数据
+### Step 2：浏览元数据
 
-```bash
-curl http://192.168.99.100:8000/api/v1/dbs/my-db
-```
+点击已添加的连接，左侧面板自动加载表/视图/列信息。
 
-首次调用会连接 PostgreSQL 并缓存元数据，之后调用直接返回缓存。
+### Step 3：执行查询
 
-### Step 3：执行 SQL 查询
-
-```bash
-curl -X POST http://192.168.99.100:8000/api/v1/dbs/my-db/query \
-  -H "Content-Type: application/json" \
-  -d '{"sql": "SELECT * FROM users"}'
-```
-
-### Step 4：自然语言生成 SQL
-
-```bash
-curl -X POST http://192.168.99.100:8000/api/v1/dbs/my-db/query/natural \
-  -H "Content-Type: application/json" \
-  -d '{"prompt": "查询用户表中所有邮箱包含 example.com 的用户"}'
-```
+在 SQL 编辑器中编写 `SELECT` 语句，点击「Execute Query」。也可在「自然语言」栏输入描述，点击「生成 SQL」自动填入编辑器。
 
 ---
 
-## 常见问题
+## 相关文档
 
-| 问题 | 原因 | 解决方法 |
-|------|------|---------|
-| 前端无法连接后端 | `VITE_API_BASE_URL` 配置错误 | 确认 Docker Toolbox IP 并重新 build |
-| 数据库连接失败 | 目标 PostgreSQL 不可从 Docker 内部访问 | 使用宿主机 IP `192.168.99.1` 而非 `localhost` |
-| LLM 生成失败 | `OPENAI_API_KEY` 未配置或无效 | 检查 `backend/.env` 并重启容器 |
-| 元数据加载超时 | PostgreSQL 表数量过多 | 增加后端超时配置；元数据缓存后不再超时 |
-
----
-
-## docker-compose.yml 参考
-
-```yaml
-version: "3.8"
-
-services:
-  backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
-    env_file:
-      - ./backend/.env
-    volumes:
-      - db_query_data:/root/.db_query
-
-  frontend:
-    build: ./frontend
-    ports:
-      - "3000:3000"
-    env_file:
-      - ./frontend/.env
-    depends_on:
-      - backend
-
-volumes:
-  db_query_data:
-```
+| 文档 | 说明 |
+|------|------|
+| [`README.md`](../../README.md) | 项目概览、技术栈、测试、API 摘要 |
+| [`docker-troubleshooting.md`](../../docker-troubleshooting.md) | Docker 启动、环境变量、网络、LLM、MySQL 排障 |
+| [`contracts/api.md`](./contracts/api.md) | 完整 API 契约（请求/响应示例、错误码） |
+| [`fixtures/test.rest`](../../fixtures/test.rest) | REST Client 测试用例（PostgreSQL + MySQL） |

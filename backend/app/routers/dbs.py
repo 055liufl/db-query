@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from datetime import datetime
 
-import asyncpg
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from app.models.db_connection import DbConnectionPutRequest, DbConnectionResponse
@@ -50,15 +49,9 @@ async def put_db(name: str, body: DbConnectionPutRequest, response: Response) ->
         await connection_service.test_connection(body.url)
     except ValueError as e:
         raise _http_error(status.HTTP_400_BAD_REQUEST, "invalid_request", str(e)) from e
-    except (OSError, asyncpg.PostgresError, Exception) as e:
-        if isinstance(e, (OSError, asyncpg.PostgresError)):
-            raise _http_error(
-                status.HTTP_500_INTERNAL_SERVER_ERROR,
-                "connection_failed",
-                "无法连接到数据库，请检查连接 URL 是否正确",
-                str(e),
-            ) from e
-        # aiomysql errors
+    except Exception as e:
+        if isinstance(e, (ValueError, HTTPException)):
+            raise
         raise _http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
             "connection_failed",
@@ -123,13 +116,6 @@ async def get_db_metadata(
 
     try:
         meta = await metadata_service.fetch_metadata(url)
-    except (OSError, asyncpg.PostgresError) as e:
-        raise _http_error(
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
-            "connection_failed",
-            "无法连接到数据库以获取元数据",
-            str(e),
-        ) from e
     except Exception as e:
         raise _http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -159,13 +145,6 @@ async def post_query(name: str, body: QueryRequest) -> QueryResult:
         return await query_service.execute_select(url, body.sql)
     except ValueError as e:
         raise _http_error(status.HTTP_400_BAD_REQUEST, "invalid_sql", str(e)) from e
-    except (OSError, asyncpg.PostgresError) as e:
-        raise _http_error(
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
-            "query_failed",
-            "执行查询失败",
-            str(e),
-        ) from e
     except Exception as e:
         raise _http_error(
             status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -25,6 +25,23 @@ services:
       timeout: 5s
       retries: 5
 
+  mysql:
+    image: mysql:8.0
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --character-set-client-handshake=FALSE
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: interview_db
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./fixtures/interview_db_seed.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   backend:
     build: ./backend
     ports:
@@ -33,6 +50,7 @@ services:
       - "host.docker.internal:host-gateway"
     depends_on:
       - postgres
+      - mysql
     # OPENAI_*: inject via env_file (host backend/.env). Avoid bind-mounting ./backend/.env to /app/.env:
     # if host once had a directory named .env, Docker would mount a directory and break Pydantic.
     env_file:
@@ -61,3 +79,4 @@ services:
 volumes:
   db_query_data:
   pg_data:
+  mysql_data:

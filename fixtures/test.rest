@@ -108,3 +108,88 @@ DELETE {{api}}/dbs/{{name}}
 # {
 #   "prompt": "任意"
 # }
+
+###############################################################################
+###############################################################################
+##                     MySQL 测试用例（interview_db）                       ##
+###############################################################################
+###############################################################################
+
+@mysqlName = interview
+@mysqlUrl = mysql://root:root@mysql:3306/interview_db
+
+###############################################################################
+### MySQL §1 — PUT /api/v1/dbs/{name} — 添加 MySQL 连接（201 新建 / 200 更新）
+PUT {{api}}/dbs/{{mysqlName}}
+Content-Type: application/json
+
+{
+  "url": "{{mysqlUrl}}"
+}
+
+###############################################################################
+### MySQL §2 — GET /api/v1/dbs/{name} — 获取 MySQL 元数据（8 张表）
+GET {{api}}/dbs/{{mysqlName}}
+
+###############################################################################
+### MySQL §3 — GET /api/v1/dbs/{name}?refresh=true — 强制刷新 MySQL 元数据
+GET {{api}}/dbs/{{mysqlName}}?refresh=true
+
+###############################################################################
+### MySQL §4 — POST /api/v1/dbs/{name}/query — 简单查询
+POST {{api}}/dbs/{{mysqlName}}/query
+Content-Type: application/json
+
+{
+  "sql": "SELECT id, name, email, current_company FROM candidates LIMIT 5"
+}
+
+###############################################################################
+### MySQL §5 — POST /api/v1/dbs/{name}/query — 多表 JOIN 查询
+POST {{api}}/dbs/{{mysqlName}}/query
+Content-Type: application/json
+
+{
+  "sql": "SELECT c.name, jp.title AS position, a.status FROM candidates c JOIN applications a ON c.id = a.candidate_id JOIN job_positions jp ON a.position_id = jp.id WHERE a.status = 'accepted'"
+}
+
+###############################################################################
+### MySQL §6 — POST /api/v1/dbs/{name}/query — 聚合查询
+POST {{api}}/dbs/{{mysqlName}}/query
+Content-Type: application/json
+
+{
+  "sql": "SELECT d.name AS department, COUNT(i.id) AS interviewer_count FROM departments d LEFT JOIN interviewers i ON d.id = i.department_id GROUP BY d.id ORDER BY interviewer_count DESC"
+}
+
+###############################################################################
+### MySQL §7 — POST /api/v1/dbs/{name}/query — 自动追加 LIMIT 测试（无 LIMIT 时追加 1000）
+POST {{api}}/dbs/{{mysqlName}}/query
+Content-Type: application/json
+
+{
+  "sql": "SELECT * FROM interview_feedback"
+}
+
+###############################################################################
+### MySQL §8 — POST /api/v1/dbs/{name}/query — 错误：非 SELECT（400）
+POST {{api}}/dbs/{{mysqlName}}/query
+Content-Type: application/json
+
+{
+  "sql": "DROP TABLE candidates"
+}
+
+###############################################################################
+### MySQL §9 — POST /api/v1/dbs/{name}/query/natural — 自然语言查询
+### 需 OPENAI_API_KEY
+POST {{api}}/dbs/{{mysqlName}}/query/natural
+Content-Type: application/json
+
+{
+  "prompt": "查询所有已通过面试并收到 offer 的候选人姓名、应聘职位和 offer 薪资"
+}
+
+###############################################################################
+### MySQL §10 — DELETE /api/v1/dbs/{name} — 删除 MySQL 连接（204）
+DELETE {{api}}/dbs/{{mysqlName}}

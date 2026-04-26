@@ -48,6 +48,7 @@ def _parse_mysql_url(url: str) -> dict:
         "user": parsed.username or "root",
         "password": parsed.password or "",
         "db": parsed.path.lstrip("/") or None,
+        "charset": "utf8mb4",
     }
 
 
@@ -69,7 +70,7 @@ async def test_mysql_connection(url: str, *, timeout_s: float = 30.0) -> None:
         async with conn.cursor() as cur:
             await cur.execute("SELECT 1")
     finally:
-        conn.close()
+        conn.ensure_closed()
 
 
 async def test_connection(url: str, *, timeout_s: float = 30.0) -> None:

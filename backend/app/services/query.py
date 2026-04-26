@@ -55,7 +55,13 @@ def _limit_was_missing(stmt: exp.Expression) -> bool:
     return True
 
 
+_SUPPORTED_DIALECTS = {"postgres", "mysql"}
+
+
 def validate_and_prepare_sql(sql: str, *, dialect: str = "postgres") -> tuple[str, bool]:
+    if dialect not in _SUPPORTED_DIALECTS:
+        msg = f"不支持的数据库方言: {dialect!r}，仅支持 {_SUPPORTED_DIALECTS}"
+        raise ValueError(msg)
     stmt = parse_single_select_statement(sql, dialect=dialect)
     missing = _limit_was_missing(stmt)
     final_stmt = _apply_limit_if_missing(stmt, 1000) if missing else stmt
@@ -155,7 +161,7 @@ async def _execute_select_mysql(url: str, sql: str) -> QueryResult:
                 elapsed_ms=elapsed_ms,
             )
     finally:
-        conn.close()
+        conn.ensure_closed()
 
 
 # MySQL field type constants (from pymysql/constants/FIELD_TYPE.py)

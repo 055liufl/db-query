@@ -260,3 +260,63 @@ cd frontend && npm run dev
 ```
 
 默认 API：`http://127.0.0.1:8000`；前端可设 `VITE_API_BASE_URL`。
+
+---
+
+## 15. MySQL 连接常见错误
+
+### 15.1 Access denied for user 'root'@'172.18.0.1' (using password: NO)
+
+**现象**：前端添加 MySQL 连接时报错：
+
+```
+无法连接到数据库，请检查连接 URL 是否正确
+(1045, "Access denied for user 'root'@'172.18.0.1' (using password: NO)")
+```
+
+![MySQL 连接失败截图](./1.png)
+
+**原因**：URL 中未包含密码。MySQL 8.0 的 root 用户在 Docker Compose 中配置了密码 `root`（`MYSQL_ROOT_PASSWORD=root`），URL 中必须带上密码。
+
+**错误 URL**：`mysql://root@192.168.75.129:3306/interview_db`（缺少密码，且使用了宿主机 IP）
+
+**解决方案**：
+
+| 场景 | 正确 URL |
+|------|---------|
+| Docker Compose 内部（推荐） | `mysql://root:root@mysql:3306/interview_db` |
+| 容器访问宿主机 MySQL | `mysql://root:root@host.docker.internal:3306/interview_db` |
+
+- **密码**：URL 格式为 `mysql://用户名:密码@主机:端口/数据库`，密码不可省略
+- **主机名**：backend 容器连接同一 Compose 网络内的 MySQL 容器应使用服务名 `mysql`，而非宿主机 IP（`192.168.x.x`）；使用宿主机 IP 会走 Docker 端口映射，增加不必要的网络开销且可能受防火墙影响
+
+### 15.2 自然语言生成 SQL：API 返回 HTML 页面而非 JSON
+
+**现象**：点击「生成 SQL」后报错：
+
+```
+AI 服务暂时不可用，请稍后重试或手动编写 SQL
+API 返回了 HTML 页面而非 JSON（常见为官网、登录页、404 或反代错误页）。
+请照服务商文档核对 OPENAI_BASE_URL：须为 OpenAI 兼容网关，且实际可访问「Base + /chat/completions」；密钥与该网关须为同一套。
+```
+
+![自然语言 SQL 报错截图](./2.png)
+
+**原因**：`backend/.env` 中 `OPENAI_BASE_URL` 缺少 `/v1` 路径后缀。后端会在 Base URL 后拼接 `/chat/completions`，导致实际请求的是 `https://example.com/chat/completions`（返回 HTML 首页），而非 `https://example.com/v1/chat/completions`（返回 JSON）。
+
+**错误配置**：
+```
+OPENAI_BASE_URL=https://moacode.org
+```
+
+**正确配置**：
+```
+OPENAI_BASE_URL=https://moacode.org/v1
+```
+
+**修复后重启 backend**：
+```bash
+docker-compose up -d --force-recreate backend
+```
+
+> **注意**：仅官方 `api.openai.com` 无需手动加 `/v1`（后端会自动补全）。第三方网关 / 代理须根据服务商文档确认完整路径，通常需要显式包含 `/v1`。
